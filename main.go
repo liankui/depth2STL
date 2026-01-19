@@ -2,25 +2,48 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"image"
 	"image/color"
 	"image/png"
 	"io"
-	"log"
+	"log/slog"
 	"math"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/segmentio/ksuid"
 	"golang.org/x/image/draw"
 )
 
+/*
+- `image_path`：要转换的图像本地路径或 URL
+- `model_width`：3D 模型的宽度（毫米，默认：50.0）
+- `model_thickness`：3D 模型的最大厚度/高度（毫米，默认：5.0）
+- `base_thickness`：底座厚度（毫米，默认：2.0）
+- `skip_depth`：是否直接使用图像或生成深度图（默认：true）
+- `invert_depth`：是否反转浮雕（明亮区域变低而不是高，默认：false）
+- `detail_level`：控制处理图像的分辨率（默认：1.0）。当 detail_level = 1.0 时，图像以 320px 分辨率处理，生成的 STL 文件通常在 100MB 以内。较高的值可以提高细节质量，但会显著增加处理时间和 STL 文件大小。例如，将 detail_level 值加倍可能会使文件大小增加 4 倍或更多，请谨慎使用。
+*/
+var (
+	imagePath      = flag.String("imagePath", "", "local path or web URL to the input image file")
+	modelWidth     = flag.Float64("modelWidth", 50.0, "width of the 3D model in mm (default: 50.0)")
+	modelThickness = flag.Float64("modelThickness", 5.0, "maximum thickness/height of the 3D model in mm (default: 5.0)")
+	baseThickness  = flag.Float64("baseThickness", 2.0, "tickness of the base in mm (default: 2.0)")
+	skipDepth      = flag.Bool("skipDepth", true, "whether to use the image directly or generate a depth map (default: true)")
+	invertDepth    = flag.Bool("invertDepth", false, "invert the relief (bright areas become low instead of high) (default: false)")
+	detailLevel    = flag.Float64("detailLevel", 1.0, "level of detail level (default: 1.0)")
+)
+
 func main() {
-	inputPath := "input/Dota_2_Monster_Hunter_codex_centaur_warrunner_gameasset.png" // 可替换为命令行参数
+	flag.Parse()
+
+	inputPath := *imagePath
 	outputDir := "./output"
-	os.MkdirAll(outputDir, os.ModePerm)
+	_ = os.MkdirAll(outputDir, os.ModePerm)
 
 	var img image.Image
 	var err error
@@ -30,26 +53,42 @@ func main() {
 		img, err = openImage(inputPath)
 	}
 	if err != nil {
-		log.Fatal("Failed to load image:", err)
+		slog.Error("failed to load image", "error", err)
+		return
 	}
 
-	depthMap := generateDepthMap(img, 1.0, false)
+	var depthMap *image.Gray
+	if *skipDepth { // 直接使用灰度图
+		depthMap = convertToGray(img)
+	} else { // 调用统一的深度图生成函数
+		depthMap = generateDepthMap(img, *detailLevel, *invertDepth)
+	}
 
-	depthPath := filepath.Join(outputDir, "depth_map.png")
-	depthFile, _ := os.Create(depthPath)
+	uid := ksuid.New().String()
+	depthPath := filepath.Join(outputDir, uid+"_depth_map.png")
+	depthFile, err := os.Create(depthPath)
+	if err != nil {
+		slog.Error("failed to open depth_map.png", "error", err)
+		return
+	}
+	defer func() {
+		_ = depthFile.Close()
+	}()
+
 	err = png.Encode(depthFile, depthMap)
 	if err != nil {
-		log.Fatal("Failed to encode image:", err)
+		slog.Error("failed to encode depth map", "error", err)
+		return
 	}
-	depthFile.Close()
 
-	stlPath := filepath.Join(outputDir, "model.stl")
-	err = generateSTL(depthMap, stlPath, 50.0, 5.0, 2.0)
+	stlPath := filepath.Join(outputDir, uid+".stl")
+	err = generateSTL(depthMap, stlPath, *modelWidth, *modelThickness, *baseThickness)
 	if err != nil {
-		log.Fatal("Failed to generate STL:", err)
+		slog.Error("failed to generate stl", "error", err)
+		return
 	}
 
-	log.Println("Done! Depth map:", depthPath, "STL:", stlPath)
+	slog.Info("generated stl", "depth path", depthPath, "stl path", stlPath)
 }
 
 // Helper: 下载图片
@@ -58,11 +97,15 @@ func downloadImage(url string) (image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
 	imgData, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
+
 	img, _, err := image.Decode(bytes.NewReader(imgData))
 	return img, err
 }
@@ -73,55 +116,78 @@ func openImage(path string) (image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
+
 	img, _, err := image.Decode(file)
 	return img, err
 }
 
-// 生成深度图（灰度图 + 高斯模糊）
+// convertToGray 直接把图像转换为灰度图（没有缩放和模糊）
+func convertToGray(img image.Image) *image.Gray {
+	bounds := img.Bounds()
+	gray := image.NewGray(bounds)
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			r, g, b, _ := img.At(x, y).RGBA()
+			val := uint8((0.299*float64(r) + 0.587*float64(g) + 0.114*float64(b)) / 256)
+			gray.SetGray(x, y, color.Gray{Y: val})
+		}
+	}
+	return gray
+}
+
+// generateDepthMap 生成深度图：灰度 + 缩放 + 高斯模糊 + 可反转
 func generateDepthMap(img image.Image, detailLevel float64, invert bool) *image.Gray {
 	bounds := img.Bounds()
 	width := bounds.Dx()
 	height := bounds.Dy()
 
-	baseSize := int(320 * detailLevel)
-	ratio := math.Min(float64(baseSize)/float64(width), float64(baseSize)/float64(height))
+	// 缩放尺寸
+	baseSize := 320.0 * detailLevel
+	ratio := math.Min(baseSize/float64(width), baseSize/float64(height))
 	newWidth := int(float64(width) * ratio)
 	newHeight := int(float64(height) * ratio)
 
-	// 调整尺寸
-	dst := image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
-	draw.CatmullRom.Scale(dst, dst.Bounds(), img, bounds, draw.Over, nil)
-
-	// 转灰度
-	gray := image.NewGray(dst.Bounds())
-	for y := 0; y < newHeight; y++ {
-		for x := 0; x < newWidth; x++ {
-			r, g, b, _ := dst.At(x, y).RGBA()
-			// 转换为 0-255
-			grayVal := uint8(math.Pow((0.299*float64(r)+0.587*float64(g)+0.114*float64(b))/65535.0, 1.5) * 255)
-			if invert {
-				grayVal = 255 - grayVal
-			}
-			gray.SetGray(x, y, color.Gray{Y: grayVal})
+	// 灰度化 + gamma 校正
+	gray := image.NewGray(bounds)
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			r, g, b, _ := img.At(x, y).RGBA()
+			val := math.Pow((0.299*float64(r)+0.587*float64(g)+0.114*float64(b))/65535.0, 1.5) * 255
+			gray.SetGray(x, y, color.Gray{Y: uint8(val)})
 		}
 	}
 
-	// 高斯模糊（简单均值模糊代替高斯）
-	blurred := image.NewGray(gray.Bounds())
-	kernel := []int{-1, 0, 1}
+	// 缩放
+	resized := image.NewGray(image.Rect(0, 0, newWidth, newHeight))
+	draw.CatmullRom.Scale(resized, resized.Bounds(), gray, gray.Bounds(), draw.Over, nil)
+
+	// 高斯模糊 (3x3 高斯卷积)
+	kernel := [3][3]float64{
+		{1 / 16.0, 2 / 16.0, 1 / 16.0},
+		{2 / 16.0, 4 / 16.0, 2 / 16.0},
+		{1 / 16.0, 2 / 16.0, 1 / 16.0},
+	}
+	blur := image.NewGray(resized.Bounds())
 	for y := 1; y < newHeight-1; y++ {
 		for x := 1; x < newWidth-1; x++ {
-			var sum int
-			for _, ky := range kernel {
-				for _, kx := range kernel {
-					sum += int(gray.GrayAt(x+kx, y+ky).Y)
+			var sum float64
+			for ky := -1; ky <= 1; ky++ {
+				for kx := -1; kx <= 1; kx++ {
+					sum += float64(resized.GrayAt(x+kx, y+ky).Y) * kernel[ky+1][kx+1]
 				}
 			}
-			blurred.SetGray(x, y, color.Gray{Y: uint8(sum / 9)})
+			val := uint8(sum)
+			if invert {
+				val = 255 - val
+			}
+			blur.SetGray(x, y, color.Gray{Y: val})
 		}
 	}
-	return blurred
+
+	return blur
 }
 
 func generateSTL(depthMap *image.Gray, outputPath string, modelWidth, modelThickness, baseThickness float64) error {
@@ -134,9 +200,11 @@ func generateSTL(depthMap *image.Gray, outputPath string, modelWidth, modelThick
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+	}()
 
-	fmt.Fprintln(f, "solid relief_model")
+	_, _ = fmt.Fprintln(f, "solid relief_model")
 
 	// 构建顶点高度
 	vertices := make([][]float64, height)
@@ -223,7 +291,7 @@ func generateSTL(depthMap *image.Gray, outputPath string, modelWidth, modelThick
 		writeFacet(f, [3]float64{x0, y1, z0}, [3]float64{x0, y1, z2}, [3]float64{x0, y0, z1})
 	}
 
-	fmt.Fprintln(f, "endsolid relief_model")
+	_, _ = fmt.Fprintln(f, "endsolid relief_model")
 	return nil
 }
 
@@ -242,11 +310,11 @@ func writeFacet(f *os.File, v1, v2, v3 [3]float64) {
 			normal[i] /= norm
 		}
 	}
-	fmt.Fprintf(f, "  facet normal %f %f %f\n", normal[0], normal[1], normal[2])
-	fmt.Fprintln(f, "    outer loop")
-	fmt.Fprintf(f, "      vertex %f %f %f\n", v1[0], v1[1], v1[2])
-	fmt.Fprintf(f, "      vertex %f %f %f\n", v2[0], v2[1], v2[2])
-	fmt.Fprintf(f, "      vertex %f %f %f\n", v3[0], v3[1], v3[2])
-	fmt.Fprintln(f, "    endloop")
-	fmt.Fprintln(f, "  endfacet")
+	_, _ = fmt.Fprintf(f, "  facet normal %f %f %f\n", normal[0], normal[1], normal[2])
+	_, _ = fmt.Fprintf(f, "    outer loop\n")
+	_, _ = fmt.Fprintf(f, "      vertex %f %f %f\n", v1[0], v1[1], v1[2])
+	_, _ = fmt.Fprintf(f, "      vertex %f %f %f\n", v2[0], v2[1], v2[2])
+	_, _ = fmt.Fprintf(f, "      vertex %f %f %f\n", v3[0], v3[1], v3[2])
+	_, _ = fmt.Fprintf(f, "    endloop\n")
+	_, _ = fmt.Fprintf(f, "  endfacet\n")
 }
