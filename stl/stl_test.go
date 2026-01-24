@@ -18,7 +18,7 @@ func genSTL(name string) error {
 		return fmt.Errorf("faild to open image, %v", err)
 	}
 
-	got := depth.GenerateDepthMap(myImage, 1, false)
+	got := depth.GenerateDepthMap2(myImage, 1, false)
 	dir := "../output/" + ksuid.New().String()
 	f, err := os.Create(dir + "_depth.png")
 	if err != nil {

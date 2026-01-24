@@ -151,12 +151,16 @@ func GenerateSTL2(depthMap *image.Gray, outputPath string, modelWidth, modelThic
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+	}()
 
 	bw := bufio.NewWriter(f)
-	defer bw.Flush()
+	defer func() {
+		_ = bw.Flush()
+	}()
 
-	fmt.Fprintln(bw, "solid relief_model")
+	_, _ = fmt.Fprintln(bw, "solid relief_model")
 
 	// 预计算 Y（翻转坐标系，避免循环内重复计算）
 	yPos := make([]float64, h)
@@ -225,7 +229,7 @@ func GenerateSTL2(depthMap *image.Gray, outputPath string, modelWidth, modelThic
 		writeFacet2(bw, [3]float64{x, y1, zBase}, [3]float64{x, y1, z2}, [3]float64{x, y0, z1})
 	}
 
-	fmt.Fprintln(bw, "endsolid relief_model")
+	_, _ = fmt.Fprintln(bw, "endsolid relief_model")
 	return nil
 }
 
@@ -244,11 +248,11 @@ func writeFacet2(w io.Writer, v1, v2, v3 [3]float64) {
 		nx, ny, nz = nx/l, ny/l, nz/l
 	}
 
-	fmt.Fprintf(w, "  facet normal %f %f %f\n", nx, ny, nz)
-	fmt.Fprintln(w, "    outer loop")
-	fmt.Fprintf(w, "      vertex %f %f %f\n", v1[0], v1[1], v1[2])
-	fmt.Fprintf(w, "      vertex %f %f %f\n", v2[0], v2[1], v2[2])
-	fmt.Fprintf(w, "      vertex %f %f %f\n", v3[0], v3[1], v3[2])
-	fmt.Fprintln(w, "    endloop")
-	fmt.Fprintln(w, "  endfacet")
+	_, _ = fmt.Fprintf(w, "  facet normal %f %f %f\n", nx, ny, nz)
+	_, _ = fmt.Fprintf(w, "    outer loop\n")
+	_, _ = fmt.Fprintf(w, "      vertex %f %f %f\n", v1[0], v1[1], v1[2])
+	_, _ = fmt.Fprintf(w, "      vertex %f %f %f\n", v2[0], v2[1], v2[2])
+	_, _ = fmt.Fprintf(w, "      vertex %f %f %f\n", v3[0], v3[1], v3[2])
+	_, _ = fmt.Fprintf(w, "    endloop\n")
+	_, _ = fmt.Fprintf(w, "  endfacet\n")
 }

@@ -62,7 +62,7 @@ func Execute() {
 	if *skipDepth { // 直接使用灰度图
 		depthMap = depth.ConvertToGray(img)
 	} else { // 调用统一的深度图生成函数
-		depthMap = depth.GenerateDepthMap(img, *detailLevel, *invertDepth)
+		depthMap = depth.GenerateDepthMap2(img, *detailLevel, *invertDepth)
 	}
 
 	uid := ksuid.New().String()
@@ -83,7 +83,7 @@ func Execute() {
 	}
 
 	stlPath := filepath.Join(outputDir, uid+".stl")
-	err = stl.GenerateSTL(depthMap, stlPath, *modelWidth, *modelThickness, *baseThickness)
+	err = stl.GenerateSTL2(depthMap, stlPath, *modelWidth, *modelThickness, *baseThickness)
 	if err != nil {
 		slog.Error("failed to generate stl", "error", err)
 		return
