@@ -1,0 +1,39 @@
+{
+  "4": {
+    "inputs": {
+      "image": "MyImage.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "5": {
+    "inputs": {
+      "images": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "预览图像"
+    }
+  },
+  "6": {
+    "inputs": {
+      "model": "ZhengPeng7/BiRefNet",
+      "load_local_model": false,
+      "background_color_name": "transparency",
+      "device": "auto",
+      "image": [
+        "4",
+        0
+      ]
+    },
+    "class_type": "BiRefNet_Hugo",
+    "_meta": {
+      "title": "🔥BiRefNet"
+    }
+  }
+}

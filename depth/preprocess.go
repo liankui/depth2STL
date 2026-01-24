@@ -1,18 +1,21 @@
 package depth
 
 import (
+	"context"
 	"errors"
 	"image"
 	"image/draw"
+
+	"github.com/chaos-io/depth2STL/depth/rembg"
 )
 
 type Preprocessor struct {
-	RemBG BackgroundRemover
+	RemBG rembg.Remover
 }
 
 func NewPreprocessor() *Preprocessor {
 	return &Preprocessor{
-		RemBG: NewDefaultRemBG(),
+		RemBG: rembg.NewDefaultRemBG(),
 	}
 }
 
@@ -39,7 +42,7 @@ func (p *Preprocessor) ImagePreprocess(input image.Image) (image.Image, error) {
 	if hasAlpha {
 		output = src
 	} else {
-		bgRemoved, err := p.RemBG.Remove(src)
+		bgRemoved, err := p.RemBG.Remove(context.Background(), src)
 		if err != nil {
 			return nil, err
 		}
