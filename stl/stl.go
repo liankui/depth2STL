@@ -1,8 +1,10 @@
 package stl
 
 import (
+	"bufio"
 	"fmt"
 	"image"
+	"io"
 	"math"
 	"os"
 )
@@ -134,4 +136,119 @@ func writeFacet(f *os.File, v1, v2, v3 [3]float64) {
 	_, _ = fmt.Fprintf(f, "      vertex %f %f %f\n", v3[0], v3[1], v3[2])
 	_, _ = fmt.Fprintf(f, "    endloop\n")
 	_, _ = fmt.Fprintf(f, "  endfacet\n")
+}
+
+func GenerateSTL2(depthMap *image.Gray, outputPath string, modelWidth, modelThickness, baseThickness float64) error {
+	b := depthMap.Bounds()
+	w, h := b.Dx(), b.Dy()
+	if w < 2 || h < 2 {
+		return fmt.Errorf("depth map too small")
+	}
+
+	pixel := modelWidth / float64(w)
+
+	f, err := os.Create(outputPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	bw := bufio.NewWriter(f)
+	defer bw.Flush()
+
+	fmt.Fprintln(bw, "solid relief_model")
+
+	// 预计算 Y（翻转坐标系，避免循环内重复计算）
+	yPos := make([]float64, h)
+	for y := 0; y < h; y++ {
+		yPos[y] = float64(h-y-1) * pixel
+	}
+
+	// 灰度 → Z 高度（即时计算，避免 vertices[][] 占用内存）
+	zAt := func(x, y int) float64 {
+		return float64(depthMap.Pix[y*depthMap.Stride+x]) / 255.0 * modelThickness
+	}
+
+	// ---------------- 顶面 ----------------
+	for y := 0; y < h-1; y++ {
+		y0, y1 := yPos[y], yPos[y+1]
+		for x := 0; x < w-1; x++ {
+			x0, x1 := float64(x)*pixel, float64(x+1)*pixel
+			z00, z10 := zAt(x, y), zAt(x+1, y)
+			z01, z11 := zAt(x, y+1), zAt(x+1, y+1)
+
+			writeFacet2(bw, [3]float64{x0, y0, z00}, [3]float64{x1, y0, z10}, [3]float64{x0, y1, z01})
+			writeFacet2(bw, [3]float64{x1, y0, z10}, [3]float64{x1, y1, z11}, [3]float64{x0, y1, z01})
+		}
+	}
+
+	// ---------------- 底面（固定厚度） ----------------
+	zBase := -baseThickness
+	for y := 0; y < h-1; y++ {
+		y0, y1 := yPos[y], yPos[y+1]
+		for x := 0; x < w-1; x++ {
+			x0, x1 := float64(x)*pixel, float64(x+1)*pixel
+			writeFacet2(bw, [3]float64{x0, y0, zBase}, [3]float64{x1, y1, zBase}, [3]float64{x0, y1, zBase})
+			writeFacet2(bw, [3]float64{x0, y0, zBase}, [3]float64{x1, y0, zBase}, [3]float64{x1, y1, zBase})
+		}
+	}
+
+	// ---------------- 前 / 后边 ----------------
+	for x := 0; x < w-1; x++ {
+		x0, x1 := float64(x)*pixel, float64(x+1)*pixel
+
+		// 前边（y = 0）
+		z1, z2 := zAt(x, h-1), zAt(x+1, h-1)
+		writeFacet2(bw, [3]float64{x0, 0, zBase}, [3]float64{x1, 0, zBase}, [3]float64{x0, 0, z1})
+		writeFacet2(bw, [3]float64{x1, 0, zBase}, [3]float64{x1, 0, z2}, [3]float64{x0, 0, z1})
+
+		// 后边（y = max）
+		y := float64(h-1) * pixel
+		z1, z2 = zAt(x, 0), zAt(x+1, 0)
+		writeFacet2(bw, [3]float64{x0, y, zBase}, [3]float64{x0, y, z1}, [3]float64{x1, y, zBase})
+		writeFacet2(bw, [3]float64{x1, y, zBase}, [3]float64{x1, y, z2}, [3]float64{x0, y, z1})
+	}
+
+	// ---------------- 左 / 右边 ----------------
+	for y := 0; y < h-1; y++ {
+		y0, y1 := yPos[y], yPos[y+1]
+
+		// 左边（x = 0）
+		z1, z2 := zAt(0, y), zAt(0, y+1)
+		writeFacet2(bw, [3]float64{0, y0, zBase}, [3]float64{0, y0, z1}, [3]float64{0, y1, zBase})
+		writeFacet2(bw, [3]float64{0, y1, zBase}, [3]float64{0, y0, z1}, [3]float64{0, y1, z2})
+
+		// 右边（x = max）
+		x := float64(w-1) * pixel
+		z1, z2 = zAt(w-1, y), zAt(w-1, y+1)
+		writeFacet2(bw, [3]float64{x, y0, zBase}, [3]float64{x, y1, zBase}, [3]float64{x, y0, z1})
+		writeFacet2(bw, [3]float64{x, y1, zBase}, [3]float64{x, y1, z2}, [3]float64{x, y0, z1})
+	}
+
+	fmt.Fprintln(bw, "endsolid relief_model")
+	return nil
+}
+
+func writeFacet2(w io.Writer, v1, v2, v3 [3]float64) {
+	// 计算法向量（v1 为原点）
+	ax, ay, az := v2[0]-v1[0], v2[1]-v1[1], v2[2]-v1[2]
+	bx, by, bz := v3[0]-v1[0], v3[1]-v1[1], v3[2]-v1[2]
+
+	nx := ay*bz - az*by
+	ny := az*bx - ax*bz
+	nz := ax*by - ay*bx
+
+	// 单位化法向量（STL 规范要求，但很多切片器不严格依赖）
+	l := math.Sqrt(nx*nx + ny*ny + nz*nz)
+	if l > 0 {
+		nx, ny, nz = nx/l, ny/l, nz/l
+	}
+
+	fmt.Fprintf(w, "  facet normal %f %f %f\n", nx, ny, nz)
+	fmt.Fprintln(w, "    outer loop")
+	fmt.Fprintf(w, "      vertex %f %f %f\n", v1[0], v1[1], v1[2])
+	fmt.Fprintf(w, "      vertex %f %f %f\n", v2[0], v2[1], v2[2])
+	fmt.Fprintf(w, "      vertex %f %f %f\n", v3[0], v3[1], v3[2])
+	fmt.Fprintln(w, "    endloop")
+	fmt.Fprintln(w, "  endfacet")
 }

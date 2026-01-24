@@ -73,3 +73,58 @@ func GenerateDepthMap(img image.Image, detailLevel float64, invert bool) *image.
 
 	return blur
 }
+
+func GenerateDepthMap2(img image.Image, detailLevel float64, invert bool) *image.Gray {
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+
+	// 防止 0 尺寸
+	base := math.Max(1, 320.0*detailLevel)
+	ratio := math.Min(base/float64(w), base/float64(h))
+	nw, nh := max(1, int(float64(w)*ratio)), max(1, int(float64(h)*ratio))
+
+	// Gamma LUT
+	var gammaLUT [256]uint8
+	for i := 0; i < 256; i++ {
+		gammaLUT[i] = uint8(math.Pow(float64(i)/255.0, 1.5)*255.0 + 0.5)
+	}
+
+	// 灰度化
+	gray := image.NewGray(b)
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			r, g, b, _ := img.At(x+b.Min.X, y+b.Min.Y).RGBA()
+			y8 := uint8((299*r + 587*g + 114*b + 500) / 1000 >> 8)
+			gray.Pix[y*gray.Stride+x] = gammaLUT[y8]
+		}
+	}
+
+	// 缩放
+	resized := image.NewGray(image.Rect(0, 0, nw, nh))
+	draw.CatmullRom.Scale(resized, resized.Bounds(), gray, gray.Bounds(), draw.Over, nil)
+
+	// 高斯模糊（整数）
+	out := image.NewGray(resized.Bounds())
+	k := [9]int{1, 2, 1, 2, 4, 2, 1, 2, 1}
+
+	for y := 1; y < nh-1; y++ {
+		for x := 1; x < nw-1; x++ {
+			sum := 0
+			idx := 0
+			for ky := -1; ky <= 1; ky++ {
+				row := (y+ky)*resized.Stride + (x - 1)
+				for kx := 0; kx < 3; kx++ {
+					sum += int(resized.Pix[row+kx]) * k[idx]
+					idx++
+				}
+			}
+			v := uint8(sum >> 4)
+			if invert {
+				v = 255 - v
+			}
+			out.Pix[y*out.Stride+x] = v
+		}
+	}
+
+	return out
+}
