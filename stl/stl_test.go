@@ -44,10 +44,13 @@ func genSTL(name string) error {
 
 var dawnbreaker = "../testdata/Dota_2_Monster_Hunter_codex_dawnbreaker_gameasset.png"
 var my = "../testdata/my_image1.png"
+var my1 = "../testdata/ComfyUI_temp_ipggf_00006_.png"
+var my11 = "../testdata/ComfyUI_temp_ipggf_00007_.png"
+var my20 = "../testdata/Dota_2_Monster_Hunter_codex_centaur_warrunner_gameasset.png"
 
 func TestGenerateSTL(t *testing.T) {
 	defer util.Trace("gen stl")
-	err := genSTL(my)
+	err := genSTL(my11)
 	if err != nil {
 		t.Errorf("faild to generate STL, %v", err)
 	}

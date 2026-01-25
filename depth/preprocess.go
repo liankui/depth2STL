@@ -10,12 +10,14 @@ import (
 )
 
 type Preprocessor struct {
-	RemBG rembg.Remover
+	imagePath string
+	RemBG     rembg.Remover
 }
 
-func NewPreprocessor() *Preprocessor {
+func NewPreprocessor(path string) *Preprocessor {
 	return &Preprocessor{
-		RemBG: rembg.NewDefaultRemBG(),
+		imagePath: path,
+		RemBG:     rembg.NewDefaultRemBG(),
 	}
 }
 

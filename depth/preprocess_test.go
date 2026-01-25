@@ -10,13 +10,14 @@ import (
 )
 
 func TestImagePreprocessor_PreprocessImage(t *testing.T) {
-	myImage, err := util.OpenImage("../testdata/my_image1.png")
+	path := "../testdata/my_image1.png"
+	myImage, err := util.OpenImage(path)
 	if err != nil {
 		t.Errorf("faild to open image, %v", err)
 		return
 	}
 
-	p := NewPreprocessor()
+	p := NewPreprocessor(path)
 	got, err := p.ImagePreprocess(myImage)
 	if err != nil {
 		t.Errorf("faild to preprocess image, %v", err)
