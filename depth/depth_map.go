@@ -75,6 +75,7 @@ func GenerateDepthMap(img image.Image, detailLevel float64, invert bool) *image.
 }
 
 const (
+	// base   = 320.0 // XY 分辨率（影响 STL 面数）
 	base   = 320.0 // XY 分辨率（影响 STL 面数）
 	levels = 36    // Z 台阶数（影响 STL 高度层次）
 )

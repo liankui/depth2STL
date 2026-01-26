@@ -61,7 +61,7 @@ func Execute() {
 	}
 
 	if *preProcessModel == rembg.BiRefNetModel {
-		p := &depth.Preprocessor{RemBG: rembg.NewBiRefNetRemBG()}
+		p := &depth.Preprocessor{RemBG: rembg.NewBiRefNetRemBG(inputPath)}
 		img, err = p.ImagePreprocess(img)
 		if err != nil {
 			slog.Error("failed to preprocess image", "error", err)
