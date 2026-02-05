@@ -40,11 +40,36 @@ var (
 func main() {
 	flag.Parse()
 
-	Execute()
+	d := &Depth{
+		ImagePath:       *imagePath,
+		ModelWidth:      *modelWidth,
+		ModelThickness:  *modelThickness,
+		BaseThickness:   *baseThickness,
+		SkipDepth:       *skipDepth,
+		PreProcessModel: *preProcessModel,
+		InvertDepth:     *invertDepth,
+		DetailLevel:     *detailLevel,
+	}
+
+	err := Execute(d)
+	if err != nil {
+		slog.Error("failed to execute depth2STL", "error", err)
+	}
 }
 
-func Execute() {
-	inputPath := *imagePath
+type Depth struct {
+	ImagePath       string
+	ModelWidth      float64
+	ModelThickness  float64
+	BaseThickness   float64
+	SkipDepth       bool
+	PreProcessModel string
+	InvertDepth     bool
+	DetailLevel     float64
+}
+
+func Execute(d *Depth) error {
+	inputPath := d.ImagePath
 	outputDir := "./output"
 	_ = os.MkdirAll(outputDir, os.ModePerm)
 
@@ -57,23 +82,23 @@ func Execute() {
 	}
 	if err != nil {
 		slog.Error("failed to load image", "error", err)
-		return
+		return err
 	}
 
-	if *preProcessModel == rembg.BiRefNetModel {
+	if d.PreProcessModel == rembg.BiRefNetModel {
 		p := &depth.Preprocessor{RemBG: rembg.NewBiRefNetRemBG(inputPath)}
 		img, err = p.ImagePreprocess(img)
 		if err != nil {
 			slog.Error("failed to preprocess image", "error", err)
-			return
+			return err
 		}
 	}
 
 	var depthMap *image.Gray
-	if *skipDepth { // 直接使用灰度图
+	if d.SkipDepth { // 直接使用灰度图
 		depthMap = depth.ConvertToGray(img)
 	} else { // 调用统一的深度图生成函数
-		depthMap = depth.GenerateDepthMap2(img, *detailLevel, *invertDepth)
+		depthMap = depth.GenerateDepthMap2(img, d.DetailLevel, d.InvertDepth)
 	}
 
 	imgId := ksuid.New().String()
@@ -81,7 +106,7 @@ func Execute() {
 	depthFile, err := os.Create(depthPath)
 	if err != nil {
 		slog.Error("failed to open depth_map.png", "error", err)
-		return
+		return err
 	}
 	defer func() {
 		_ = depthFile.Close()
@@ -90,15 +115,16 @@ func Execute() {
 	err = png.Encode(depthFile, depthMap)
 	if err != nil {
 		slog.Error("failed to encode depth map", "error", err)
-		return
+		return err
 	}
 
 	stlPath := filepath.Join(outputDir, imgId+".stl")
-	err = stl.GenerateSTL2(depthMap, stlPath, *modelWidth, *modelThickness, *baseThickness)
+	err = stl.GenerateSTL2(depthMap, stlPath, d.ModelWidth, d.ModelThickness, d.BaseThickness)
 	if err != nil {
 		slog.Error("failed to generate stl", "error", err)
-		return
+		return err
 	}
 
 	slog.Info("generated stl", "stl path", stlPath, "depth path", depthPath)
+	return nil
 }
