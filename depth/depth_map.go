@@ -8,15 +8,20 @@ import (
 	"golang.org/x/image/draw"
 )
 
-// ConvertToGray 直接把图像转换为灰度图（没有缩放和模糊）
+// PNG → *image.NRGBA
+//
+// JPEG → *image.YCbCr
+//
+// 灰度图 → *image.Gray
+
+// ConvertToGray 直接把图像转换为灰度图
 func ConvertToGray(img image.Image) *image.Gray {
 	bounds := img.Bounds()
 	gray := image.NewGray(bounds)
+
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			r, g, b, _ := img.At(x, y).RGBA()
-			val := uint8((0.299*float64(r) + 0.587*float64(g) + 0.114*float64(b)) / 256)
-			gray.SetGray(x, y, color.Gray{Y: val})
+			gray.Set(x, y, color.GrayModel.Convert(img.At(x, y)))
 		}
 	}
 	return gray
