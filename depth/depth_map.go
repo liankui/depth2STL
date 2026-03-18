@@ -151,3 +151,114 @@ func GenerateDepthMap2(img image.Image, detailLevel float64, invert bool) *image
 
 	return out
 }
+
+func GenerateDepthMap3(img image.Image, detailLevel float64, invert bool) *image.Gray {
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+
+	// ---------- 缩放 ----------
+	base := math.Max(1, 320.0*detailLevel)
+	ratio := math.Min(base/float64(w), base/float64(h))
+	nw, nh := max(1, int(float64(w)*ratio)), max(1, int(float64(h)*ratio))
+
+	// ---------- 灰度 ----------
+	gray := image.NewGray(b)
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			r, g, b, _ := img.At(x+b.Min.X, y+b.Min.Y).RGBA()
+			v := uint8((299*r + 587*g + 114*b) / 1000 >> 8)
+			gray.Pix[y*gray.Stride+x] = v
+		}
+	}
+
+	// ---------- 缩放 ----------
+	resized := image.NewGray(image.Rect(0, 0, nw, nh))
+	draw.CatmullRom.Scale(resized, resized.Bounds(), gray, gray.Bounds(), draw.Over, nil)
+
+	// ---------- 轻模糊 ----------
+	blur := image.NewGray(resized.Bounds())
+	for y := 1; y < nh-1; y++ {
+		for x := 1; x < nw-1; x++ {
+			sum := int(resized.GrayAt(x, y).Y)*4 +
+				int(resized.GrayAt(x-1, y).Y) +
+				int(resized.GrayAt(x+1, y).Y) +
+				int(resized.GrayAt(x, y-1).Y) +
+				int(resized.GrayAt(x, y+1).Y)
+			blur.SetGray(x, y, color.Gray{Y: uint8(sum / 8)})
+		}
+	}
+	resized = blur
+
+	// =========================================================
+	// 🔥 关键：百分位对比拉伸（忽略黑背景）
+	// =========================================================
+
+	hist := make([]int, 256)
+	for _, v := range resized.Pix {
+		hist[v]++
+	}
+
+	total := len(resized.Pix)
+	lowCut := total * 2 / 100   // 2%
+	highCut := total * 98 / 100 // 98%
+
+	sum := 0
+	minVal, maxVal := 0, 255
+
+	for i := 0; i < 256; i++ {
+		sum += hist[i]
+		if sum >= lowCut {
+			minVal = i
+			break
+		}
+	}
+
+	sum = 0
+	for i := 255; i >= 0; i-- {
+		sum += hist[i]
+		if sum >= (total - highCut) {
+			maxVal = i
+			break
+		}
+	}
+
+	if maxVal <= minVal {
+		maxVal = minVal + 1
+	}
+
+	scale := 255.0 / float64(maxVal-minVal)
+
+	// ---------- 拉伸 + gamma ----------
+	out := image.NewGray(resized.Bounds())
+
+	gamma := 0.7 // 🔥 提亮暗部（关键）
+
+	for i, v := range resized.Pix {
+		nv := float64(v-uint8(minVal)) * scale
+		if nv < 0 {
+			nv = 0
+		}
+		if nv > 255 {
+			nv = 255
+		}
+
+		// gamma
+		nv = math.Pow(nv/255.0, gamma) * 255
+
+		val := uint8(nv + 0.5)
+
+		if invert {
+			val = 255 - val
+		}
+
+		out.Pix[i] = val
+	}
+
+	// ---------- Z量化 ----------
+	step := uint8(256 / levels)
+	for i, v := range out.Pix {
+		out.Pix[i] = (v / step) * step
+	}
+
+	return out
+}
