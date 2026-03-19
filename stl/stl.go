@@ -256,3 +256,147 @@ func writeFacet2(w io.Writer, v1, v2, v3 [3]float64) {
 	_, _ = fmt.Fprintf(w, "    endloop\n")
 	_, _ = fmt.Fprintf(w, "  endfacet\n")
 }
+
+func GenerateSTL4(depthMap *image.Gray, outputPath string, modelWidth, modelThickness, baseThickness float64) error {
+	b := depthMap.Bounds()
+	w, h := b.Dx(), b.Dy()
+	if w < 2 || h < 2 {
+		return fmt.Errorf("depth map too small")
+	}
+
+	pixel := modelWidth / float64(w)
+
+	f, err := os.Create(outputPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	bw := bufio.NewWriter(f)
+	defer bw.Flush()
+
+	fmt.Fprintln(bw, "solid relief_model")
+
+	// ---------- 双线性采样 ----------
+	zAt := func(x, y float64) float64 {
+		x0 := int(math.Floor(x))
+		y0 := int(math.Floor(y))
+		x1 := min(x0+1, w-1)
+		y1 := min(y0+1, h-1)
+
+		fx := x - float64(x0)
+		fy := y - float64(y0)
+
+		get := func(ix, iy int) float64 {
+			return float64(depthMap.Pix[iy*depthMap.Stride+ix]) / 255.0
+		}
+
+		z00 := get(x0, y0)
+		z10 := get(x1, y0)
+		z01 := get(x0, y1)
+		z11 := get(x1, y1)
+
+		z0 := z00*(1-fx) + z10*fx
+		z1 := z01*(1-fx) + z11*fx
+		z := z0*(1-fy) + z1*fy
+
+		z = math.Pow(z, 0.7) // 非线性增强
+		return z * modelThickness
+	}
+
+	zBase := -baseThickness
+
+	// =========================================================
+	// 1️⃣ 顶面
+	// =========================================================
+	for y := 0; y < h-1; y++ {
+		for x := 0; x < w-1; x++ {
+
+			x0 := float64(x) * pixel
+			x1 := float64(x+1) * pixel
+			y0 := float64(h-y-1) * pixel
+			y1 := float64(h-y-2) * pixel
+
+			z00 := zAt(float64(x), float64(y))
+			z10 := zAt(float64(x+1), float64(y))
+			z01 := zAt(float64(x), float64(y+1))
+			z11 := zAt(float64(x+1), float64(y+1))
+
+			writeFacet2(bw, [3]float64{x0, y0, z00}, [3]float64{x1, y0, z10}, [3]float64{x0, y1, z01})
+			writeFacet2(bw, [3]float64{x1, y0, z10}, [3]float64{x1, y1, z11}, [3]float64{x0, y1, z01})
+		}
+	}
+
+	// =========================================================
+	// 2️⃣ 底面（完全封闭）
+	// =========================================================
+	for y := 0; y < h-1; y++ {
+		for x := 0; x < w-1; x++ {
+
+			x0 := float64(x) * pixel
+			x1 := float64(x+1) * pixel
+			y0 := float64(h-y-1) * pixel
+			y1 := float64(h-y-2) * pixel
+
+			writeFacet2(bw, [3]float64{x0, y0, zBase}, [3]float64{x0, y1, zBase}, [3]float64{x1, y1, zBase})
+			writeFacet2(bw, [3]float64{x0, y0, zBase}, [3]float64{x1, y1, zBase}, [3]float64{x1, y0, zBase})
+		}
+	}
+
+	// =========================================================
+	// 3️⃣ 四边侧壁（完全闭合）
+	// =========================================================
+
+	// ---- 前边 (y=0)
+	for x := 0; x < w-1; x++ {
+		x0 := float64(x) * pixel
+		x1 := float64(x+1) * pixel
+
+		z1 := zAt(float64(x), float64(h-1))
+		z2 := zAt(float64(x+1), float64(h-1))
+
+		writeFacet2(bw, [3]float64{x0, 0, zBase}, [3]float64{x0, 0, z1}, [3]float64{x1, 0, zBase})
+		writeFacet2(bw, [3]float64{x1, 0, zBase}, [3]float64{x0, 0, z1}, [3]float64{x1, 0, z2})
+	}
+
+	// ---- 后边 (y=max)
+	yMax := float64(h-1) * pixel
+	for x := 0; x < w-1; x++ {
+		x0 := float64(x) * pixel
+		x1 := float64(x+1) * pixel
+
+		z1 := zAt(float64(x), 0)
+		z2 := zAt(float64(x+1), 0)
+
+		writeFacet2(bw, [3]float64{x0, yMax, zBase}, [3]float64{x1, yMax, zBase}, [3]float64{x0, yMax, z1})
+		writeFacet2(bw, [3]float64{x1, yMax, zBase}, [3]float64{x1, yMax, z2}, [3]float64{x0, yMax, z1})
+	}
+
+	// ---- 左边 (x=0)
+	for y := 0; y < h-1; y++ {
+		y0 := float64(h-y-1) * pixel
+		y1 := float64(h-y-2) * pixel
+
+		z1 := zAt(0, float64(y))
+		z2 := zAt(0, float64(y+1))
+
+		writeFacet2(bw, [3]float64{0, y0, zBase}, [3]float64{0, y1, zBase}, [3]float64{0, y0, z1})
+		writeFacet2(bw, [3]float64{0, y1, zBase}, [3]float64{0, y1, z2}, [3]float64{0, y0, z1})
+	}
+
+	// ---- 右边 (x=max)
+	xMax := float64(w-1) * pixel
+	for y := 0; y < h-1; y++ {
+		y0 := float64(h-y-1) * pixel
+		y1 := float64(h-y-2) * pixel
+
+		z1 := zAt(float64(w-1), float64(y))
+		z2 := zAt(float64(w-1), float64(y+1))
+
+		writeFacet2(bw, [3]float64{xMax, y0, zBase}, [3]float64{xMax, y0, z1}, [3]float64{xMax, y1, zBase})
+		writeFacet2(bw, [3]float64{xMax, y1, zBase}, [3]float64{xMax, y0, z1}, [3]float64{xMax, y1, z2})
+	}
+
+	fmt.Fprintln(bw, "endsolid relief_model")
+	return nil
+}
