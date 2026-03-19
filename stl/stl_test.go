@@ -30,7 +30,7 @@ func genSTL(name string) error {
 	_ = os.MkdirAll(stlDir, os.ModePerm)
 
 	// got := depth.ConvertToGray(myImage)
-	got := depth.GenerateDepthMap3(myImage, 1, false)
+	got := depth.GenerateDepthMap4(myImage, 1, false)
 	pngPath := filepath.Join(outDir, filepath.Base(name))
 	f, err := os.Create(pngPath)
 	if err != nil {
@@ -58,15 +58,16 @@ func genSTL(name string) error {
 
 var dawnbreaker = "../testdata/Dota_2_Monster_Hunter_codex_dawnbreaker_gameasset.png"
 var my = "../testdata/my_image1.png"
-var my1 = "../testdata/ComfyUI_temp_ipggf_00006_.png"
-var my11 = "../testdata/ComfyUI_temp_ipggf_00007_.png"
 var my20 = "../testdata/Dota_2_Monster_Hunter_codex_centaur_warrunner_gameasset.png"
 var my21 = "../images/Dota_2_Monster_Hunter_codex_anti-mage_persona_gameasset.png"
 var my22 = "../images/Dota_2_Monster_Hunter_codex_chaos_knight_gameasset.png"
+var my23 = "../images/Dota_2_Monster_Hunter_codex_bloodseeker_gameasset.png"
+var my24 = "../images/Dota_2_Monster_Hunter_codex_terrorblade_gameasset.png"
+var my25 = "../images/Dota_2_Monster_Hunter_codex_shadow_fiend_gameasset.png"
 
 func TestGenerateSTL(t *testing.T) {
 	defer util.Trace("gen stl")
-	err := genSTL(my22)
+	err := genSTL(my25)
 	if err != nil {
 		t.Errorf("faild to generate STL, %v", err)
 	}

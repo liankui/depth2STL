@@ -262,3 +262,166 @@ func GenerateDepthMap3(img image.Image, detailLevel float64, invert bool) *image
 
 	return out
 }
+
+func GenerateDepthMap4(img image.Image, detailLevel float64, invert bool) *image.Gray {
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+
+	// ---------- 缩放 ----------
+	baseSize := math.Max(1, 320.0*detailLevel)
+	ratio := math.Min(baseSize/float64(w), baseSize/float64(h))
+	nw, nh := max(1, int(float64(w)*ratio)), max(1, int(float64(h)*ratio))
+
+	// ---------- 灰度 ----------
+	gray := image.NewGray(b)
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			r, g, b, _ := img.At(x+b.Min.X, y+b.Min.Y).RGBA()
+			v := uint8((299*r + 587*g + 114*b) / 1000 >> 8)
+
+			// 🔥 背景抑制（关键）
+			if v < 8 {
+				v = 0
+			}
+
+			gray.Pix[y*gray.Stride+x] = v
+		}
+	}
+
+	// ---------- 缩放 ----------
+	resized := image.NewGray(image.Rect(0, 0, nw, nh))
+	draw.CatmullRom.Scale(resized, resized.Bounds(), gray, gray.Bounds(), draw.Over, nil)
+
+	// =========================================================
+	// 1️⃣ 低频（Base）= 模糊
+	// =========================================================
+	base := image.NewGray(resized.Bounds())
+	for y := 1; y < nh-1; y++ {
+		for x := 1; x < nw-1; x++ {
+			sum := 0
+			for ky := -1; ky <= 1; ky++ {
+				for kx := -1; kx <= 1; kx++ {
+					sum += int(resized.GrayAt(x+kx, y+ky).Y)
+				}
+			}
+			base.SetGray(x, y, color.Gray{Y: uint8(sum / 9)})
+		}
+	}
+
+	// =========================================================
+	// 2️⃣ 高频（Detail）= Laplacian
+	// =========================================================
+	detail := image.NewGray(resized.Bounds())
+	for y := 1; y < nh-1; y++ {
+		for x := 1; x < nw-1; x++ {
+			c := int(resized.GrayAt(x, y).Y) * 4
+			sum := c -
+				int(resized.GrayAt(x-1, y).Y) -
+				int(resized.GrayAt(x+1, y).Y) -
+				int(resized.GrayAt(x, y-1).Y) -
+				int(resized.GrayAt(x, y+1).Y)
+
+			sum = sum/2 + 128 // 中心化
+
+			if sum < 0 {
+				sum = 0
+			}
+			if sum > 255 {
+				sum = 255
+			}
+
+			detail.SetGray(x, y, color.Gray{Y: uint8(sum)})
+		}
+	}
+
+	// =========================================================
+	// 3️⃣ 百分位拉伸（对 base 做）
+	// =========================================================
+	hist := make([]int, 256)
+	for _, v := range base.Pix {
+		hist[v]++
+	}
+
+	total := len(base.Pix)
+	lowCut := total * 2 / 100
+	highCut := total * 98 / 100
+
+	sum := 0
+	minVal, maxVal := 0, 255
+
+	for i := 0; i < 256; i++ {
+		sum += hist[i]
+		if sum >= lowCut {
+			minVal = i
+			break
+		}
+	}
+
+	sum = 0
+	for i := 255; i >= 0; i-- {
+		sum += hist[i]
+		if sum >= (total - highCut) {
+			maxVal = i
+			break
+		}
+	}
+
+	if maxVal <= minVal {
+		maxVal = minVal + 1
+	}
+
+	scale := 255.0 / float64(maxVal-minVal)
+
+	// =========================================================
+	// 4️⃣ 融合 Base + Detail
+	// =========================================================
+	out := image.NewGray(base.Bounds())
+
+	detailStrength := 0.6 // 🔥 控制雕刻强度
+	gamma := 0.7          // 🔥 提亮暗部
+
+	for i := range base.Pix {
+		// base 拉伸
+		bv := float64(base.Pix[i]-uint8(minVal)) * scale
+		if bv < 0 {
+			bv = 0
+		}
+		if bv > 255 {
+			bv = 255
+		}
+
+		// detail [-128,128]
+		dv := float64(int(detail.Pix[i]) - 128)
+
+		// 融合
+		v := bv + dv*detailStrength
+
+		if v < 0 {
+			v = 0
+		}
+		if v > 255 {
+			v = 255
+		}
+
+		// gamma
+		v = math.Pow(v/255.0, gamma) * 255
+
+		val := uint8(v + 0.5)
+
+		if invert {
+			val = 255 - val
+		}
+
+		out.Pix[i] = val
+	}
+
+	// =========================================================
+	// 5️⃣ Z量化
+	// =========================================================
+	step := uint8(256 / levels)
+	for i, v := range out.Pix {
+		out.Pix[i] = (v / step) * step
+	}
+
+	return out
+}
