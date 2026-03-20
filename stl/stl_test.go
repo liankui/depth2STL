@@ -30,7 +30,7 @@ func genSTL(name string) error {
 	_ = os.MkdirAll(stlDir, os.ModePerm)
 
 	// got := depth.ConvertToGray(myImage)
-	got := depth.GenerateDepthMap4(myImage, 1, false)
+	got := depth.GenerateDepthMap4(myImage, false)
 	pngPath := filepath.Join(outDir, filepath.Base(name))
 	f, err := os.Create(pngPath)
 	if err != nil {

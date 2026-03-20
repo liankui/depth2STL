@@ -38,7 +38,7 @@ func crontab() {
 
 	// 每一小时执行
 	_, err := c.AddFunc("@hourly", func() {
-		// _, err := c.AddFunc("* * * * * *", func() {  // debug
+		// _, err := c.AddFunc("* */5 * * * *", func() { // debug
 		api.ClearJobs()
 	})
 	if err != nil {

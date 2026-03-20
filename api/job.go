@@ -1,8 +1,9 @@
 package api
 
 import (
-	"log/slog"
+	"fmt"
 	"os"
+	"path"
 	"sync"
 	"time"
 )
@@ -28,11 +29,13 @@ type Job struct {
 	ID             string
 	Name           string
 	FilePath       string
-	OutputPath     string
-	DetailLevel    float64
+	GrayImgPath    string
+	StlPath        string
 	ModelWidth     float64
 	ModelThickness float64
 	BaseThickness  float64
+	SkipDepth      bool
+	Invert         bool
 	SubSample      int
 	Status         JobStatus
 	Error          string
@@ -47,10 +50,18 @@ func ClearJobs() {
 		job := value.(*Job)
 
 		// 清理1天前的任务
-		if job.CreatedAt.After(oneDayAgo) {
-			slog.Info("clear job", "id", job.ID)
-			_ = os.Remove(job.FilePath)
-			_ = os.Remove(job.OutputPath)
+		if job.CreatedAt.Before(oneDayAgo) {
+			// if job.CreatedAt.After(oneDayAgo) { // debug
+			// 	if job.Status == StatusQueued || job.Status == StatusProcessing {
+			// 		return true
+			// 	}
+
+			dir := path.Dir(job.FilePath)
+			fmt.Printf("clear job, id:%s, path:%s\n", job.ID, dir)
+			err := os.RemoveAll(dir)
+			if err != nil {
+				fmt.Printf("clear job error: %s\n", err)
+			}
 			jobStore.Delete(job.ID)
 		}
 

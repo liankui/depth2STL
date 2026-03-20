@@ -263,12 +263,12 @@ func GenerateDepthMap3(img image.Image, detailLevel float64, invert bool) *image
 	return out
 }
 
-func GenerateDepthMap4(img image.Image, detailLevel float64, invert bool) *image.Gray {
+func GenerateDepthMap4(img image.Image, invert bool) *image.Gray {
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
 
 	// ---------- 缩放 ----------
-	baseSize := math.Max(1, 320.0*detailLevel)
+	baseSize := math.Max(1, 320.0)
 	ratio := math.Min(baseSize/float64(w), baseSize/float64(h))
 	nw, nh := max(1, int(float64(w)*ratio)), max(1, int(float64(h)*ratio))
 

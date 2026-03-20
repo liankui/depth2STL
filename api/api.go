@@ -4,26 +4,30 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/segmentio/ksuid"
 )
 
+var pwd, _ = os.Getwd()
+
 func UploadHandler(c *gin.Context) {
 	file, _ := c.FormFile("file")
-
 	ext := filepath.Ext(file.Filename)
 	filename := strings.TrimSuffix(file.Filename, ext)
-	jobID := filename + "_" + ksuid.New().String()
-	pwd, _ := os.Getwd()
-	tmpDir := filepath.Join(pwd, "tmp")
+
+	jobID := ksuid.New().String()
+	tmpDir := filepath.Join(pwd, "tmp", jobID)
 	_ = os.MkdirAll(tmpDir, os.ModePerm)
 
-	inputPath := filepath.Join(tmpDir, jobID+".png")
-	outputPath := filepath.Join(tmpDir, jobID+".stl")
+	inputPath := filepath.Join(tmpDir, file.Filename)
+	imgPath := filepath.Join(tmpDir, jobID+ext)
+	stlPath := filepath.Join(tmpDir, jobID+".stl")
 
 	err := c.SaveUploadedFile(file, inputPath)
 	if err != nil {
@@ -34,15 +38,23 @@ func UploadHandler(c *gin.Context) {
 	}
 
 	job := &Job{
-		ID:         jobID,
-		Name:       filename,
-		FilePath:   inputPath,
-		OutputPath: outputPath,
-		Status:     StatusQueued,
+		ID:          jobID,
+		Name:        filename,
+		FilePath:    inputPath,
+		GrayImgPath: imgPath,
+		StlPath:     stlPath,
+		Status:      StatusQueued,
 	}
 
-	jobStore.Store(jobID, job)
-	jobQueue <- job
+	select {
+	case jobQueue <- job:
+		jobStore.Store(jobID, job)
+	case <-time.After(3 * time.Second):
+		c.JSON(http.StatusTooManyRequests, gin.H{
+			"error": "job queue is busy, try again later",
+		})
+		return
+	}
 
 	c.JSON(200, gin.H{"jobId": jobID})
 }
@@ -67,7 +79,7 @@ func DownloadStlHandler(c *gin.Context) {
 	}
 
 	// 文件是否存在
-	if _, err := os.Stat(job.OutputPath); err != nil {
+	if _, err := os.Stat(job.StlPath); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "file missing"})
 		return
 	}
@@ -77,7 +89,7 @@ func DownloadStlHandler(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s.stl", job.ID))
 	c.Header("Content-Transfer-Encoding", "binary")
 
-	c.File(job.OutputPath)
+	c.File(job.StlPath)
 }
 
 func GetJobHandler(c *gin.Context) {
@@ -162,8 +174,7 @@ func DeleteJobHandler(c *gin.Context) {
 
 	job := val.(*Job)
 
-	_ = os.Remove(job.FilePath)
-	_ = os.Remove(job.OutputPath)
+	_ = os.Remove(path.Dir(job.FilePath))
 
 	jobStore.Delete(jobID)
 
