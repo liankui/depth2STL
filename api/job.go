@@ -29,7 +29,7 @@ type Job struct {
 	ID             string
 	Name           string
 	FilePath       string
-	GrayImgPath    string
+	ImagePath      string
 	StlPath        string
 	ModelWidth     float64
 	ModelThickness float64

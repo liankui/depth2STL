@@ -69,7 +69,7 @@ func processJob(job *Job) error {
 	} else {
 		gray = depth.GenerateDepthMap4(img, job.Invert)
 	}
-	f, err = os.Create(job.GrayImgPath)
+	f, err = os.Create(job.ImagePath)
 	if err != nil {
 		return err
 	}
@@ -79,7 +79,7 @@ func processJob(job *Job) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("gen img, path:%s\n", job.GrayImgPath)
+	fmt.Printf("gen img, path:%s\n", job.ImagePath)
 
 	// 生成 STL
 	err = stl.GenerateSTL5(gray, job.StlPath, job.ModelWidth, job.ModelThickness, job.BaseThickness, job.SubSample)

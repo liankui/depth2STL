@@ -38,12 +38,12 @@ func UploadHandler(c *gin.Context) {
 	}
 
 	job := &Job{
-		ID:          jobID,
-		Name:        filename,
-		FilePath:    inputPath,
-		GrayImgPath: imgPath,
-		StlPath:     stlPath,
-		Status:      StatusQueued,
+		ID:        jobID,
+		Name:      filename,
+		FilePath:  inputPath,
+		ImagePath: imgPath,
+		StlPath:   stlPath,
+		Status:    StatusQueued,
 	}
 
 	select {
@@ -90,6 +90,39 @@ func DownloadStlHandler(c *gin.Context) {
 	c.Header("Content-Transfer-Encoding", "binary")
 
 	c.File(job.StlPath)
+}
+
+func DownloadImageHandler(c *gin.Context) {
+	jobID := c.Param("jobId")
+
+	val, ok := jobStore.Load(jobID)
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
+		return
+	}
+
+	job := val.(*Job)
+
+	if job.Status != StatusDone {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":  "file not ready",
+			"status": job.Status,
+		})
+		return
+	}
+
+	// 文件是否存在
+	if _, err := os.Stat(job.ImagePath); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "file missing"})
+		return
+	}
+
+	// 设置下载头
+	c.Header("Content-Type", "application/octet-stream")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s.png", job.ID))
+	c.Header("Content-Transfer-Encoding", "binary")
+
+	c.File(job.ImagePath)
 }
 
 func GetJobHandler(c *gin.Context) {
