@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/chaos-io/depth2STL/api"
 	"github.com/gin-gonic/gin"
+	"github.com/robfig/cron/v3"
 )
 
 func main() {
@@ -20,11 +21,29 @@ func main() {
 		v1.DELETE("/relief/queue/:jobId", api.DeleteJobHandler)   // 删除任务
 	}
 
+	crontab()
+
 	// By default it serves on :8080 unless a
 	// PORT environment variable was defined.
-	err := router.Run(":9100")
+	err := router.Run(":31101")
 	if err != nil {
 		panic(err)
 	}
 	// router.Run(":3000") for a hard coded port
+}
+
+func crontab() {
+	// 创建 cron 实例（支持秒级）
+	c := cron.New(cron.WithSeconds())
+
+	// 每一小时执行
+	_, err := c.AddFunc("@hourly", func() {
+		// _, err := c.AddFunc("* * * * * *", func() {  // debug
+		api.ClearJobs()
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	c.Start()
 }

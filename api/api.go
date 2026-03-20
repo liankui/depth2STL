@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync/atomic"
 
 	"github.com/gin-gonic/gin"
@@ -13,17 +15,30 @@ import (
 func UploadHandler(c *gin.Context) {
 	file, _ := c.FormFile("file")
 
-	jobID := ksuid.New().String()
-	inputPath := "/tmp/" + jobID + ".png"
-	outputPath := "/tmp/" + jobID + ".stl"
+	ext := filepath.Ext(file.Filename)
+	filename := strings.TrimSuffix(file.Filename, ext)
+	jobID := filename + "_" + ksuid.New().String()
+	pwd, _ := os.Getwd()
+	tmpDir := filepath.Join(pwd, "tmp")
+	_ = os.MkdirAll(tmpDir, os.ModePerm)
 
-	c.SaveUploadedFile(file, inputPath)
+	inputPath := filepath.Join(tmpDir, jobID+".png")
+	outputPath := filepath.Join(tmpDir, jobID+".stl")
+
+	err := c.SaveUploadedFile(file, inputPath)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
 
 	job := &Job{
 		ID:         jobID,
+		Name:       filename,
 		FilePath:   inputPath,
 		OutputPath: outputPath,
-		Status:     "queued",
+		Status:     StatusQueued,
 	}
 
 	jobStore.Store(jobID, job)
@@ -147,8 +162,8 @@ func DeleteJobHandler(c *gin.Context) {
 
 	job := val.(*Job)
 
-	os.Remove(job.FilePath)
-	os.Remove(job.OutputPath)
+	_ = os.Remove(job.FilePath)
+	_ = os.Remove(job.OutputPath)
 
 	jobStore.Delete(jobID)
 

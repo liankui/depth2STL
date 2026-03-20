@@ -6,9 +6,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	depth2 "github.com/chaos-io/depth2STL/depth"
+	"github.com/chaos-io/depth2STL/depth"
 	"github.com/chaos-io/depth2STL/stl"
 )
+
+func init() {
+	StartWorkers(2)
+}
 
 func StartWorkers(n int) {
 	for i := 0; i < n; i++ {
@@ -16,24 +20,20 @@ func StartWorkers(n int) {
 	}
 }
 
-var semaphore = make(chan struct{}, 4)
-
 func workerLoop() {
 	for job := range jobQueue {
 		atomic.AddInt32(&activeWorkers, 1)
 		job.Status = StatusProcessing
-		job.UpdatedAt = time.Now()
+		job.CreatedAt = time.Now()
 
-		semaphore <- struct{}{}
-
-		err := processJob(job)
-		<-semaphore
-		if err != nil {
-			job.Status = StatusFailed
-			job.Error = err.Error()
-		} else {
-			job.Status = StatusDone
-		}
+		// err := processJob(job)
+		// if err != nil {
+		// 	job.Status = StatusFailed
+		// 	job.Error = err.Error()
+		// } else {
+		time.Sleep(20 * time.Second)
+		job.Status = StatusDone
+		// }
 
 		job.UpdatedAt = time.Now()
 		atomic.AddInt32(&activeWorkers, -1)
@@ -46,7 +46,9 @@ func processJob(job *Job) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+	}()
 
 	img, _, err := image.Decode(f)
 	if err != nil {
@@ -54,17 +56,10 @@ func processJob(job *Job) error {
 	}
 
 	// 生成深度图
-	depth := depth2.GenerateDepthMap4(img, job.DetailLevel, false)
+	_depth := depth.GenerateDepthMap4(img, job.DetailLevel, false)
 
 	// 生成 STL
-	err = stl.GenerateSTL5(
-		depth,
-		job.OutputPath,
-		job.ModelWidth,
-		job.ModelThickness,
-		job.BaseThickness,
-		job.SubSample,
-	)
+	err = stl.GenerateSTL5(_depth, job.OutputPath, job.ModelWidth, job.ModelThickness, job.BaseThickness, job.SubSample)
 	if err != nil {
 		return err
 	}
