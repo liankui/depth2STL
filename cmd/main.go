@@ -11,11 +11,20 @@ func main() {
 	router := gin.Default()
 	router.MaxMultipartMemory = 10 << 20 // 10 MiB
 
-	router.GET("/v1/relief/{jobId}", getting)
-	router.POST("/v1/relief", api.UploadHandler)
+	{
+		v1 := router.Group("/v1")
+		v1.POST("/relief", api.UploadHandler)                     // 创建任务
+		v1.GET("/relief/download/:jobId", api.DownloadStlHandler) // 下载STL
+		v1.GET("/relief/:jobId", api.GetJobHandler)               // 查询任务
+		v1.GET("/relief/queue/status", api.QueueStatusHandler)    // 队列状态
+		v1.DELETE("/relief/queue/:jobId", api.DeleteJobHandler)   // 删除任务
+	}
 
 	// By default it serves on :8080 unless a
 	// PORT environment variable was defined.
-	router.Run()
+	err := router.Run(":9100")
+	if err != nil {
+		panic(err)
+	}
 	// router.Run(":3000") for a hard coded port
 }

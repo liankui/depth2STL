@@ -3,6 +3,8 @@ package api
 import (
 	"image"
 	"os"
+	"sync/atomic"
+	"time"
 
 	depth2 "github.com/chaos-io/depth2STL/depth"
 	"github.com/chaos-io/depth2STL/stl"
@@ -18,17 +20,23 @@ var semaphore = make(chan struct{}, 4)
 
 func workerLoop() {
 	for job := range jobQueue {
-		job.Status = "processing"
+		atomic.AddInt32(&activeWorkers, 1)
+		job.Status = StatusProcessing
+		job.UpdatedAt = time.Now()
+
 		semaphore <- struct{}{}
 
 		err := processJob(job)
 		<-semaphore
 		if err != nil {
-			job.Status = "failed"
-			continue
+			job.Status = StatusFailed
+			job.Error = err.Error()
+		} else {
+			job.Status = StatusDone
 		}
 
-		job.Status = "done"
+		job.UpdatedAt = time.Now()
+		atomic.AddInt32(&activeWorkers, -1)
 	}
 }
 
