@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -16,7 +17,70 @@ import (
 
 var pwd, _ = os.Getwd()
 
+func parseFloat64Form(c *gin.Context, key string, defaultValue float64) (float64, error) {
+	value := strings.TrimSpace(c.PostForm(key))
+	if value == "" {
+		return defaultValue, nil
+	}
+
+	return strconv.ParseFloat(value, 64)
+}
+
+func parseIntForm(c *gin.Context, key string, defaultValue int) (int, error) {
+	value := strings.TrimSpace(c.PostForm(key))
+	if value == "" {
+		return defaultValue, nil
+	}
+
+	return strconv.Atoi(value)
+}
+
+func parseBoolForm(c *gin.Context, key string, defaultValue bool) (bool, error) {
+	value := strings.TrimSpace(c.PostForm(key))
+	if value == "" {
+		return defaultValue, nil
+	}
+
+	return strconv.ParseBool(value)
+}
+
 func CreateHandler(c *gin.Context) {
+	modelWidth, err := parseFloat64Form(c, "modelWidth", 50.0)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid modelWidth"})
+		return
+	}
+
+	modelThickness, err := parseFloat64Form(c, "modelThickness", 5.0)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid modelThickness"})
+		return
+	}
+
+	baseThickness, err := parseFloat64Form(c, "baseThickness", 2.0)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid baseThickness"})
+		return
+	}
+
+	skipConv, err := parseBoolForm(c, "skipConv", false)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid skipConv"})
+		return
+	}
+
+	invert, err := parseBoolForm(c, "invert", false)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid invert"})
+		return
+	}
+
+	detailLevel, err := parseIntForm(c, "detailLevel", 1)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid subSample"})
+		return
+	}
+
 	file, err := c.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -50,12 +114,12 @@ func CreateHandler(c *gin.Context) {
 		FilePath:       inputPath,
 		ImagePath:      imgPath,
 		StlPath:        stlPath,
-		ModelWidth:     30,
-		ModelThickness: 2,
-		BaseThickness:  1,
-		SkipConv:       false,
-		Invert:         false,
-		SubSample:      1,
+		ModelWidth:     modelWidth,
+		ModelThickness: modelThickness,
+		BaseThickness:  baseThickness,
+		SkipConv:       skipConv,
+		Invert:         invert,
+		DetailLevel:    detailLevel,
 		Status:         StatusQueued,
 	}
 

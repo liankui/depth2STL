@@ -406,21 +406,18 @@ func GenerateSTL4(depthMap *image.Gray, outputPath string, modelWidth, modelThic
 // 1. depthMap → heightField（缓存）
 // 2. heightField → mesh（避免重复计算）
 // 3. mesh → Binary STL（高速输出）
-// subSample = 1   // 普通
-// subSample = 2   // 推荐（质量↑4倍）
-// subSample = 3   // 高精度（面数爆炸）
-func GenerateSTL5(depthMap *image.Gray, outputPath string, modelWidth, modelThickness, baseThickness float64, subSample int) error {
+func GenerateSTL5(depthMap *image.Gray, outputPath string, modelWidth, modelThickness, baseThickness float64, detailLevel int) error {
 	b := depthMap.Bounds()
 	w, h := b.Dx(), b.Dy()
 	if w < 2 || h < 2 {
 		return fmt.Errorf("depth map too small")
 	}
 
-	if subSample < 1 {
-		subSample = 1
+	if detailLevel < 1 {
+		detailLevel = 1
 	}
 
-	step := 1.0 / float64(subSample)
+	step := 1.0 / float64(detailLevel)
 	gridW := int(float64(w-1)/step) + 1
 	gridH := int(float64(h-1)/step) + 1
 

@@ -82,7 +82,7 @@ func processJob(job *Job) error {
 	fmt.Printf("gen img, path:%s\n", job.ImagePath)
 
 	// 生成 STL
-	err = stl.GenerateSTL5(gray, job.StlPath, job.ModelWidth, job.ModelThickness, job.BaseThickness, job.SubSample)
+	err = stl.GenerateSTL5(gray, job.StlPath, job.ModelWidth, job.ModelThickness, job.BaseThickness, job.DetailLevel)
 	if err != nil {
 		return err
 	}

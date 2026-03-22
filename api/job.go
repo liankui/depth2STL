@@ -36,7 +36,7 @@ type Job struct {
 	BaseThickness  float64 // 底座高度（毫米，默认：2.0）
 	SkipConv       bool    // 跳过深度图处理（默认：false）
 	Invert         bool    // 反转浮雕（默认：false）
-	SubSample      int     // 精度 1:普通 2:推荐（质量高4倍） 3:高精度
+	DetailLevel    int     // 精度 1:普通 2:推荐（质量高4倍） 3:高精度
 	Status         JobStatus
 	Error          string
 	CreatedAt      time.Time
