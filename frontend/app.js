@@ -5,15 +5,13 @@ const POLLABLE_STATUSES = new Set(["queued", "processing"]);
 
 const uploadForm = document.getElementById("uploadForm");
 const uploadFileInput = document.getElementById("uploadFile");
-const uploadTitle = document.getElementById("uploadTitle");
 const fileMeta = document.getElementById("fileMeta");
 const fileError = document.getElementById("fileError");
 const sourceFrame = document.getElementById("sourceFrame");
 const sourceImage = document.getElementById("sourceImage");
 const sourcePlaceholder = document.getElementById("sourcePlaceholder");
+const createJobBtn = document.getElementById("createJobBtn");
 const jobIdInput = document.getElementById("jobIdInput");
-const jobIdValue = document.getElementById("jobIdValue");
-const queryJobBtn = document.getElementById("queryJobBtn");
 const jobStatusBadge = document.getElementById("jobStatusBadge");
 const statusMessage = document.getElementById("statusMessage");
 const resultFrame = document.getElementById("resultFrame");
@@ -54,12 +52,15 @@ function setStatus(status) {
   const done = safeStatus === "done";
   downloadImageBtn.disabled = !done;
   downloadStlBtn.disabled = !done;
+  if (!done) {
+    downloadImageBtn.classList.remove("is-downloaded");
+    downloadStlBtn.classList.remove("is-downloaded");
+  }
 }
 
 function setCurrentJobId(jobId) {
   currentJobId = jobId || "";
   jobIdInput.value = currentJobId;
-  jobIdValue.textContent = currentJobId || "-";
 }
 
 function showFileError(message) {
@@ -106,7 +107,6 @@ function updateSelectedFile() {
   }
 
   if (!file) {
-    uploadTitle.textContent = "选择图片";
     fileMeta.textContent = "未选择文件";
     showFileError("");
     setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, "", "选择图片后这里显示原图。");
@@ -116,7 +116,6 @@ function updateSelectedFile() {
   const error = validateFile(file);
   if (error) {
     uploadFileInput.value = "";
-    uploadTitle.textContent = "选择图片";
     fileMeta.textContent = "未选择文件";
     showFileError(error);
     setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, "", "选择图片后这里显示原图。");
@@ -124,7 +123,6 @@ function updateSelectedFile() {
   }
 
   showFileError("");
-  uploadTitle.textContent = file.name;
   fileMeta.textContent = formatSize(file.size);
   sourceObjectUrl = URL.createObjectURL(file);
   setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, sourceObjectUrl, "");
@@ -292,6 +290,7 @@ uploadForm.addEventListener("submit", async (event) => {
 
     setCurrentJobId(jobId);
     setStatus("queued");
+    createJobBtn.classList.add("is-downloaded");
     statusMessage.textContent = `任务创建成功，jobId: ${jobId}`;
     clearResultPreview("正在生成，请稍候。");
     startPolling(jobId);
@@ -302,22 +301,10 @@ uploadForm.addEventListener("submit", async (event) => {
   }
 });
 
-queryJobBtn.addEventListener("click", async () => {
-  try {
-    const data = await queryJob(jobIdInput.value.trim());
-    if (POLLABLE_STATUSES.has(data.status)) {
-      startPolling(data.jobId || jobIdInput.value.trim());
-    }
-  } catch (queryError) {
-    setStatus("idle");
-    statusMessage.textContent = `查询失败：${queryError.message}`;
-    stopPolling();
-  }
-});
-
 downloadImageBtn.addEventListener("click", async () => {
   try {
     await downloadFile(currentJobId || jobIdInput.value.trim(), "image");
+    downloadImageBtn.classList.add("is-downloaded");
   } catch (downloadError) {
     statusMessage.textContent = `下载 image 失败：${downloadError.message}`;
   }
@@ -326,6 +313,7 @@ downloadImageBtn.addEventListener("click", async () => {
 downloadStlBtn.addEventListener("click", async () => {
   try {
     await downloadFile(currentJobId || jobIdInput.value.trim(), "stl");
+    downloadStlBtn.classList.add("is-downloaded");
   } catch (downloadError) {
     statusMessage.textContent = `下载 STL 失败：${downloadError.message}`;
   }
@@ -334,6 +322,7 @@ downloadStlBtn.addEventListener("click", async () => {
 function init() {
   setCurrentJobId("");
   setStatus("idle");
+  createJobBtn.classList.remove("is-downloaded");
   showFileError("");
   setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, "", "选择图片后这里显示原图。");
   clearResultPreview("状态为 done 后，这里显示生成图。");

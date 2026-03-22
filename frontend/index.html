@@ -21,35 +21,28 @@
           <article class="frame-card">
             <div class="frame-head">
               <h2>原图</h2>
-              <div class="toolbar-status">
-                <span id="jobStatusBadge" class="badge badge-idle">idle</span>
-                <strong id="jobIdValue">-</strong>
+              <div class="actions actions-with-status">
+                <span id="fileMeta" class="meta">未选择文件</span>
+                <button id="createJobBtn" type="submit" form="uploadForm" class="secondary">创建任务</button>
               </div>
             </div>
             <div class="frame-toolbar">
               <form id="uploadForm" class="frame-toolbar-group">
-                <label class="file-picker" for="uploadFile">
-                  <input id="uploadFile" type="file" accept="image/png,image/jpeg,image/webp" required />
-                  <span id="uploadTitle">选择图片</span>
-                </label>
-                <span id="fileMeta" class="meta">未选择文件</span>
-                <button type="submit">创建任务</button>
+                <input id="uploadFile" type="file" accept="image/png,image/jpeg,image/webp" required />
+                <input id="jobIdInput" type="hidden" />
               </form>
-              <div class="frame-toolbar-group frame-toolbar-query">
-                <input id="jobIdInput" type="text" placeholder="jobId" />
-                <button id="queryJobBtn" type="button" class="secondary">查询状态</button>
-              </div>
             </div>
-            <div id="sourceFrame" class="image-frame">
+            <label id="sourceFrame" class="image-frame upload-frame" for="uploadFile">
               <img id="sourceImage" class="frame-image" alt="上传图片预览" />
-              <p id="sourcePlaceholder" class="placeholder">选择图片后这里显示原图。</p>
-            </div>
+              <p id="sourcePlaceholder" class="placeholder">点击这里上传图片</p>
+            </label>
           </article>
 
           <article class="frame-card">
             <div class="frame-head">
               <h2>生成图</h2>
-              <div class="actions">
+              <div class="actions actions-with-status">
+                <span id="jobStatusBadge" class="badge badge-idle">idle</span>
                 <button id="downloadImageBtn" type="button" class="secondary" disabled>下载 image</button>
                 <button id="downloadStlBtn" type="button" class="secondary" disabled>下载 STL</button>
               </div>

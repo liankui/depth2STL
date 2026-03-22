@@ -79,30 +79,19 @@ input {
   flex-shrink: 0;
 }
 
-.file-picker {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 132px;
-  padding: 11px 14px;
-  border: 1px dashed #b8c5e6;
-  border-radius: 14px;
-  background: var(--primary-soft);
-  cursor: pointer;
-}
-
-.file-picker input {
+#uploadFile {
   display: none;
 }
 
 input[type="text"] {
   width: 100%;
   min-width: 0;
-  padding: 11px 12px;
+  padding: 9px 12px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: #fff;
   color: var(--text);
+  font-size: 0.95rem;
 }
 
 button {
@@ -115,6 +104,12 @@ button {
   box-shadow: 0 8px 20px rgba(47, 91, 234, 0.18);
 }
 
+.compact-btn {
+  padding: 8px 12px;
+  font-size: 0.92rem;
+  white-space: nowrap;
+}
+
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -125,6 +120,12 @@ button:disabled {
   background: var(--primary-soft);
   color: #2347b8;
   box-shadow: none;
+}
+
+.secondary.is-downloaded {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(47, 91, 234, 0.18);
 }
 
 .meta,
@@ -212,12 +213,18 @@ button:disabled {
 
 .frame-toolbar-query input {
   flex: 1;
+  min-width: 170px;
 }
 
 .actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.actions-with-status {
+  justify-content: flex-end;
 }
 
 .image-frame {
@@ -232,6 +239,7 @@ button:disabled {
   display: grid;
   place-items: center;
   overflow: hidden;
+  padding: 14px;
 }
 
 .frame-image {
@@ -239,6 +247,7 @@ button:disabled {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  border-radius: 12px;
 }
 
 .image-frame.has-image .frame-image {
@@ -257,6 +266,19 @@ button:disabled {
   line-height: 1.6;
 }
 
+.upload-frame {
+  cursor: pointer;
+  background:
+    linear-gradient(180deg, rgba(237, 242, 255, 0.9), rgba(248, 250, 255, 0.96)),
+    linear-gradient(90deg, rgba(47, 91, 234, 0.04) 1px, transparent 1px),
+    linear-gradient(rgba(47, 91, 234, 0.04) 1px, transparent 1px);
+  background-size: auto, 24px 24px, 24px 24px;
+}
+
+.upload-frame:not(.has-image) {
+  border-style: dashed;
+}
+
 @media (max-width: 920px) {
   .frame-grid,
   .frame-toolbar {
@@ -271,6 +293,10 @@ button:disabled {
 
   button {
     width: 100%;
+  }
+
+  .frame-toolbar-query input {
+    min-width: 0;
   }
 
   .image-frame {
