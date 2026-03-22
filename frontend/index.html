@@ -3,19 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>depth2STL</title>
+    <title>浮雕工坊</title>
     <link rel="stylesheet" href="/frontend/styles.css" />
   </head>
   <body>
     <main class="page">
       <section class="shell">
         <header class="header">
-          <h1>depth2STL</h1>
-          <p>上传原图，等待生成结果。</p>
+          <h1>浮雕工坊</h1>
+          <p>上传原图，等待生成结果，完成后下载深度图与 STL。</p>
         </header>
 
-        <p id="fileError" class="message error hidden"></p>
-        <p id="statusMessage" class="message status-line">创建任务后会自动查询状态。</p>
+        <div class="intro-notes">
+          <p id="fileError" class="message error hidden"></p>
+          <p id="statusMessage" class="message status-line">上传后会自动创建任务并持续查询状态。</p>
+        </div>
 
         <section class="frame-grid">
           <article class="frame-card">
@@ -60,7 +62,7 @@
                 <button id="downloadStlBtn" type="button" class="secondary" disabled>下载 STL</button>
               </div>
             </div>
-            <div id="resultFrame" class="image-frame">
+            <div id="resultFrame" class="image-frame result-full-frame">
               <img id="previewImage" class="frame-image" alt="生成的 depth image 预览" />
               <p id="previewHint" class="placeholder">完成后显示生成图。</p>
             </div>

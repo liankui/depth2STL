@@ -47,17 +47,28 @@ input {
 
 .header {
   margin-bottom: 22px;
+  text-align: center;
 }
 
 .header h1 {
   margin: 0 0 8px;
-  font-size: 2.15rem;
+  font-size: 2.3rem;
   letter-spacing: -0.03em;
 }
 
 .header p {
   margin: 0;
   color: var(--muted);
+  max-width: 560px;
+  margin-inline: auto;
+  line-height: 1.6;
+}
+
+.intro-notes {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+  justify-items: center;
 }
 
 .frame-toolbar {
@@ -169,12 +180,14 @@ button:disabled {
 }
 
 .status-line {
-  margin-bottom: 16px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: #f3f6fd;
 }
 
 .error {
   color: var(--danger);
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 
 .hidden {
@@ -253,6 +266,15 @@ button:disabled {
   border-radius: 12px;
 }
 
+.result-full-frame {
+  padding: 0;
+}
+
+.result-full-frame .frame-image {
+  object-fit: cover;
+  border-radius: 0;
+}
+
 .image-frame.has-image .frame-image {
   display: block;
 }
@@ -262,18 +284,27 @@ button:disabled {
 }
 
 .placeholder {
-  max-width: 280px;
-  padding: 20px;
+  width: 100%;
+  height: 100%;
+  padding: 28px;
   text-align: center;
   color: var(--muted);
   line-height: 1.6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .upload-placeholder {
-  max-width: 320px;
-  padding: 12px;
+  width: 100%;
+  height: 100%;
+  padding: 28px;
   text-align: center;
   transition: transform 0.18s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 .upload-anim {
