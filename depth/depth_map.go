@@ -267,24 +267,32 @@ func GenerateDepthMap4(img image.Image, invert bool) *image.Gray {
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
 
+	const (
+		baseSize       = 320.0
+		backgroundClip = 8
+		detailStrength = 0.6
+		gamma          = 0.7
+	)
+
 	// ---------- 缩放 ----------
-	baseSize := math.Max(1, 320.0)
 	ratio := math.Min(baseSize/float64(w), baseSize/float64(h))
 	nw, nh := max(1, int(float64(w)*ratio)), max(1, int(float64(h)*ratio))
 
 	// ---------- 灰度 ----------
 	gray := image.NewGray(b)
 	for y := 0; y < h; y++ {
+		srcY := y + b.Min.Y
+		rowStart := y * gray.Stride
 		for x := 0; x < w; x++ {
-			r, g, b, _ := img.At(x+b.Min.X, y+b.Min.Y).RGBA()
-			v := uint8((299*r + 587*g + 114*b) / 1000 >> 8)
+			r, g, bl, _ := img.At(x+b.Min.X, srcY).RGBA()
+			v := uint8((299*r + 587*g + 114*bl) / 1000 >> 8)
 
 			// 🔥 背景抑制（关键）
-			if v < 8 {
+			if v < backgroundClip {
 				v = 0
 			}
 
-			gray.Pix[y*gray.Stride+x] = v
+			gray.Pix[rowStart+x] = v
 		}
 	}
 
@@ -296,15 +304,23 @@ func GenerateDepthMap4(img image.Image, invert bool) *image.Gray {
 	// 1️⃣ 低频（Base）= 模糊
 	// =========================================================
 	base := image.NewGray(resized.Bounds())
+	var hist [256]int
+	rs := resized.Stride
+	bs := base.Stride
+	innerCount := 0
 	for y := 1; y < nh-1; y++ {
+		prev := (y - 1) * rs
+		curr := y * rs
+		next := (y + 1) * rs
+		out := y * bs
 		for x := 1; x < nw-1; x++ {
-			sum := 0
-			for ky := -1; ky <= 1; ky++ {
-				for kx := -1; kx <= 1; kx++ {
-					sum += int(resized.GrayAt(x+kx, y+ky).Y)
-				}
-			}
-			base.SetGray(x, y, color.Gray{Y: uint8(sum / 9)})
+			sum := int(resized.Pix[prev+x-1]) + int(resized.Pix[prev+x]) + int(resized.Pix[prev+x+1]) +
+				int(resized.Pix[curr+x-1]) + int(resized.Pix[curr+x]) + int(resized.Pix[curr+x+1]) +
+				int(resized.Pix[next+x-1]) + int(resized.Pix[next+x]) + int(resized.Pix[next+x+1])
+			v := uint8(sum / 9)
+			base.Pix[out+x] = v
+			hist[v]++
+			innerCount++
 		}
 	}
 
@@ -312,14 +328,18 @@ func GenerateDepthMap4(img image.Image, invert bool) *image.Gray {
 	// 2️⃣ 高频（Detail）= Laplacian
 	// =========================================================
 	detail := image.NewGray(resized.Bounds())
+	ds := detail.Stride
 	for y := 1; y < nh-1; y++ {
+		prev := (y - 1) * rs
+		curr := y * rs
+		next := (y + 1) * rs
+		out := y * ds
 		for x := 1; x < nw-1; x++ {
-			c := int(resized.GrayAt(x, y).Y) * 4
-			sum := c -
-				int(resized.GrayAt(x-1, y).Y) -
-				int(resized.GrayAt(x+1, y).Y) -
-				int(resized.GrayAt(x, y-1).Y) -
-				int(resized.GrayAt(x, y+1).Y)
+			sum := int(resized.Pix[curr+x])*4 -
+				int(resized.Pix[curr+x-1]) -
+				int(resized.Pix[curr+x+1]) -
+				int(resized.Pix[prev+x]) -
+				int(resized.Pix[next+x])
 
 			sum = sum/2 + 128 // 中心化
 
@@ -330,19 +350,15 @@ func GenerateDepthMap4(img image.Image, invert bool) *image.Gray {
 				sum = 255
 			}
 
-			detail.SetGray(x, y, color.Gray{Y: uint8(sum)})
+			detail.Pix[out+x] = uint8(sum)
 		}
 	}
 
 	// =========================================================
 	// 3️⃣ 百分位拉伸（对 base 做）
 	// =========================================================
-	hist := make([]int, 256)
-	for _, v := range base.Pix {
-		hist[v]++
-	}
-
 	total := len(base.Pix)
+	hist[0] += total - innerCount
 	lowCut := total * 2 / 100
 	highCut := total * 98 / 100
 
@@ -376,9 +392,6 @@ func GenerateDepthMap4(img image.Image, invert bool) *image.Gray {
 	// 4️⃣ 融合 Base + Detail
 	// =========================================================
 	out := image.NewGray(base.Bounds())
-
-	detailStrength := 0.6 // 🔥 控制雕刻强度
-	gamma := 0.7          // 🔥 提亮暗部
 
 	for i := range base.Pix {
 		// base 拉伸
