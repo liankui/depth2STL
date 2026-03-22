@@ -269,6 +269,71 @@ button:disabled {
   line-height: 1.6;
 }
 
+.upload-placeholder {
+  max-width: 320px;
+  padding: 12px;
+  text-align: center;
+  transition: transform 0.18s ease;
+}
+
+.upload-anim {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  margin: 0 auto 18px;
+  display: grid;
+  place-items: center;
+}
+
+.upload-anim-ring,
+.upload-anim-core {
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+}
+
+.upload-anim-ring {
+  border: 1px solid rgba(47, 91, 234, 0.18);
+  background: rgba(47, 91, 234, 0.04);
+  animation: uploadPulse 2.2s ease-in-out infinite;
+}
+
+.upload-anim-core {
+  inset: 10px;
+  display: grid;
+  place-items: center;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(47, 91, 234, 0.2), rgba(47, 91, 234, 0.09));
+  color: #2f5bea;
+  animation: uploadFloat 2.2s ease-in-out infinite;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.upload-anim-core svg {
+  width: 40px;
+  height: 40px;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.upload-placeholder strong {
+  display: block;
+  color: var(--text);
+  font-size: 1.1rem;
+  margin-bottom: 10px;
+  letter-spacing: -0.01em;
+}
+
+.upload-placeholder span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.93rem;
+  line-height: 1.65;
+}
+
 .upload-frame {
   cursor: pointer;
   background:
@@ -280,6 +345,44 @@ button:disabled {
 
 .upload-frame:not(.has-image) {
   border-style: dashed;
+}
+
+.upload-frame:not(.has-image):hover .upload-placeholder {
+  transform: translateY(-1px);
+}
+
+.upload-frame:not(.has-image):hover .upload-anim-ring {
+  border-color: rgba(47, 91, 234, 0.28);
+}
+
+.upload-frame:not(.has-image):hover .upload-anim-core {
+  background: linear-gradient(180deg, rgba(47, 91, 234, 0.22), rgba(47, 91, 234, 0.12));
+}
+
+@keyframes uploadFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes uploadPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+
+.upload-frame.has-image .upload-placeholder {
+  display: none;
 }
 
 @media (max-width: 920px) {

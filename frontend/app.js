@@ -33,16 +33,21 @@ function formatSize(size) {
 }
 
 function setFrameImage(frame, img, placeholder, objectUrl, emptyText) {
+  const richPlaceholder = placeholder.classList.contains("upload-placeholder");
   if (objectUrl) {
     img.src = objectUrl;
     frame.classList.add("has-image");
-    placeholder.textContent = "";
+    if (!richPlaceholder) {
+      placeholder.textContent = "";
+    }
     return;
   }
 
   img.removeAttribute("src");
   frame.classList.remove("has-image");
-  placeholder.textContent = emptyText;
+  if (!richPlaceholder) {
+    placeholder.textContent = emptyText;
+  }
 }
 
 function setStatus(status) {
@@ -109,7 +114,13 @@ function updateSelectedFile() {
   if (!file) {
     fileMeta.textContent = "未选择文件";
     showFileError("");
-    setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, "", "选择图片后这里显示原图。");
+    setFrameImage(
+      sourceFrame,
+      sourceImage,
+      sourcePlaceholder,
+      "",
+      "",
+    );
     return;
   }
 
@@ -118,7 +129,13 @@ function updateSelectedFile() {
     uploadFileInput.value = "";
     fileMeta.textContent = "未选择文件";
     showFileError(error);
-    setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, "", "选择图片后这里显示原图。");
+    setFrameImage(
+      sourceFrame,
+      sourceImage,
+      sourcePlaceholder,
+      "",
+      "",
+    );
     return;
   }
 
@@ -182,15 +199,15 @@ function getStatusText(status, error) {
     return "任务已创建，等待处理。";
   }
   if (status === "processing") {
-    return "任务处理中，页面会继续自动查询。";
+    return "任务处理中。";
   }
   if (status === "done") {
-    return "任务已完成，可以查看生成图并下载 image 与 STL。";
+    return "任务已完成，可下载结果。";
   }
   if (status === "failed") {
     return error ? `任务失败：${error}` : "任务失败。";
   }
-  return "创建任务后会返回 jobId，并自动开始查询。";
+  return "创建任务后会自动查询状态。";
 }
 
 async function queryJob(jobId) {
@@ -291,8 +308,8 @@ uploadForm.addEventListener("submit", async (event) => {
     setCurrentJobId(jobId);
     setStatus("queued");
     createJobBtn.classList.add("is-downloaded");
-    statusMessage.textContent = `任务创建成功，jobId: ${jobId}`;
-    clearResultPreview("正在生成，请稍候。");
+    statusMessage.textContent = `任务已创建，jobId: ${jobId}`;
+    clearResultPreview("处理中...");
     startPolling(jobId);
   } catch (requestError) {
     setStatus("failed");
@@ -324,8 +341,14 @@ function init() {
   setStatus("idle");
   createJobBtn.classList.remove("is-downloaded");
   showFileError("");
-  setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, "", "选择图片后这里显示原图。");
-  clearResultPreview("状态为 done 后，这里显示生成图。");
+  setFrameImage(
+    sourceFrame,
+    sourceImage,
+    sourcePlaceholder,
+    "",
+    "",
+  );
+  clearResultPreview("完成后显示生成图。");
 }
 
 init();

@@ -11,11 +11,11 @@
       <section class="shell">
         <header class="header">
           <h1>depth2STL</h1>
-          <p>上传图片，创建任务，查看生成结果。</p>
+          <p>上传原图，等待生成结果。</p>
         </header>
 
         <p id="fileError" class="message error hidden"></p>
-        <p id="statusMessage" class="message status-line">创建任务后会返回 jobId，并自动开始查询。</p>
+        <p id="statusMessage" class="message status-line">创建任务后会自动查询状态。</p>
 
         <section class="frame-grid">
           <article class="frame-card">
@@ -34,7 +34,20 @@
             </div>
             <label id="sourceFrame" class="image-frame upload-frame" for="uploadFile">
               <img id="sourceImage" class="frame-image" alt="上传图片预览" />
-              <p id="sourcePlaceholder" class="placeholder">点击这里上传图片</p>
+              <div id="sourcePlaceholder" class="upload-placeholder">
+                <span class="upload-anim" aria-hidden="true">
+                  <span class="upload-anim-ring"></span>
+                  <span class="upload-anim-core">
+                    <svg viewBox="0 0 24 24" role="presentation">
+                      <path d="M8.5 18.5h7.2a3.3 3.3 0 0 0 .5-6.6 4.8 4.8 0 0 0-9.3-1.2A3.7 3.7 0 0 0 8.5 18.5Z" />
+                      <path d="M12 15.5V9" />
+                      <path d="m9.6 11.4 2.4-2.4 2.4 2.4" />
+                    </svg>
+                  </span>
+                </span>
+                <strong>点击上传原图</strong>
+                <span>建议使用主体清晰、边缘完整的图片</span>
+              </div>
             </label>
           </article>
 
@@ -49,7 +62,7 @@
             </div>
             <div id="resultFrame" class="image-frame">
               <img id="previewImage" class="frame-image" alt="生成的 depth image 预览" />
-              <p id="previewHint" class="placeholder">状态为 done 后，这里显示生成图。</p>
+              <p id="previewHint" class="placeholder">完成后显示生成图。</p>
             </div>
           </article>
         </section>
