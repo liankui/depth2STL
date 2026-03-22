@@ -1,13 +1,17 @@
-const DEFAULT_API_BASE = "http://localhost:31101/v1";
+const API_BASE = "/v1";
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
-
-const API_BASE = ((window.APP_CONFIG && window.APP_CONFIG.apiBaseUrl) || DEFAULT_API_BASE).replace(/\/$/, "");
+const POLL_INTERVAL_MS = 2500;
+const POLLABLE_STATUSES = new Set(["queued", "processing"]);
 
 const uploadForm = document.getElementById("uploadForm");
 const uploadFileInput = document.getElementById("uploadFile");
+const uploadBox = document.getElementById("uploadBox");
+const uploadPreviewImage = document.getElementById("uploadPreviewImage");
 const uploadTitle = document.getElementById("uploadTitle");
+const uploadEmptyState = document.getElementById("uploadEmptyState");
 const fileMeta = document.getElementById("fileMeta");
 const fileError = document.getElementById("fileError");
+const pollingState = document.getElementById("pollingState");
 const sourceFrame = document.getElementById("sourceFrame");
 const sourceImage = document.getElementById("sourceImage");
 const sourcePlaceholder = document.getElementById("sourcePlaceholder");
@@ -25,6 +29,7 @@ const downloadStlBtn = document.getElementById("downloadStlBtn");
 let currentJobId = "";
 let sourceObjectUrl = "";
 let resultObjectUrl = "";
+let jobPollTimer = null;
 
 function formatSize(size) {
   if (size < 1024 * 1024) {
@@ -46,6 +51,19 @@ function setFrameImage(frame, img, placeholder, objectUrl, emptyText) {
   placeholder.textContent = emptyText;
 }
 
+function setUploadBoxImage(objectUrl) {
+  if (objectUrl) {
+    uploadPreviewImage.src = objectUrl;
+    uploadBox.classList.add("has-image");
+    uploadEmptyState.classList.add("hidden");
+    return;
+  }
+
+  uploadPreviewImage.removeAttribute("src");
+  uploadBox.classList.remove("has-image");
+  uploadEmptyState.classList.remove("hidden");
+}
+
 function setStatus(status) {
   const safeStatus = status || "idle";
   jobStatusBadge.textContent = safeStatus;
@@ -59,6 +77,10 @@ function setCurrentJobId(jobId) {
   currentJobId = jobId || "";
   jobIdInput.value = currentJobId;
   jobIdValue.textContent = currentJobId || "-";
+}
+
+function setPolling(active) {
+  pollingState.textContent = active ? "自动查询中" : "未轮询";
 }
 
 function showFileError(message) {
@@ -77,6 +99,14 @@ function clearResultPreview(message) {
     resultObjectUrl = "";
   }
   setFrameImage(resultFrame, previewImage, previewHint, "", message);
+}
+
+function stopPolling() {
+  if (jobPollTimer) {
+    clearInterval(jobPollTimer);
+    jobPollTimer = null;
+  }
+  setPolling(false);
 }
 
 function validateFile(file) {
@@ -101,6 +131,7 @@ function updateSelectedFile() {
     uploadTitle.textContent = "选择图片";
     fileMeta.textContent = "未选择文件";
     showFileError("");
+    setUploadBoxImage("");
     setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, "", "选择图片后在这里显示。");
     return;
   }
@@ -111,6 +142,7 @@ function updateSelectedFile() {
     uploadTitle.textContent = "选择图片";
     fileMeta.textContent = "未选择文件";
     showFileError(error);
+    setUploadBoxImage("");
     setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, "", "选择图片后在这里显示。");
     return;
   }
@@ -119,11 +151,17 @@ function updateSelectedFile() {
   uploadTitle.textContent = file.name;
   fileMeta.textContent = formatSize(file.size);
   sourceObjectUrl = URL.createObjectURL(file);
+  setUploadBoxImage(sourceObjectUrl);
   setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, sourceObjectUrl, "");
 }
 
 async function requestJson(path, options = {}) {
-  const response = await fetch(`${API_BASE}${path}`, options);
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, options);
+  } catch {
+    throw new Error("接口无法连接，请确认服务已启动并从同一个服务地址打开页面");
+  }
   const text = await response.text();
   let data;
 
@@ -134,7 +172,10 @@ async function requestJson(path, options = {}) {
   }
 
   if (!response.ok) {
-    const message = typeof data === "object" && data && data.error ? data.error : `${response.status} ${response.statusText}`;
+    let message = typeof data === "object" && data && data.error ? data.error : `${response.status} ${response.statusText}`;
+    if (response.status === 404) {
+      message = "404 Not Found，请确认启动的是 Web 服务入口：go run ./cmd";
+    }
     throw new Error(message);
   }
 
@@ -142,9 +183,15 @@ async function requestJson(path, options = {}) {
 }
 
 async function loadResultPreview(jobId) {
-  const response = await fetch(`${API_BASE}/relief/download/image/${jobId}`);
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/relief/download/image/${jobId}`);
+  } catch {
+    throw new Error("生成图接口无法连接");
+  }
   if (!response.ok) {
-    throw new Error("image 读取失败");
+    const data = await response.json().catch(() => null);
+    throw new Error(data && data.error ? data.error : "image 读取失败");
   }
 
   if (resultObjectUrl) {
@@ -186,11 +233,35 @@ async function queryJob(jobId) {
 
   if (status === "done") {
     await loadResultPreview(jobId);
+    stopPolling();
   } else if (status === "failed") {
     clearResultPreview(data.error || "任务失败，当前无可下载结果。");
+    stopPolling();
   } else {
     clearResultPreview(`任务 ${jobId} 当前状态：${status}`);
   }
+
+  return data;
+}
+
+function startPolling(jobId) {
+  stopPolling();
+  setPolling(true);
+
+  const poll = async () => {
+    try {
+      const data = await queryJob(jobId);
+      if (!POLLABLE_STATUSES.has(data.status)) {
+        stopPolling();
+      }
+    } catch (error) {
+      statusMessage.textContent = `查询失败：${error.message}`;
+      stopPolling();
+    }
+  };
+
+  poll();
+  jobPollTimer = setInterval(poll, POLL_INTERVAL_MS);
 }
 
 async function downloadFile(jobId, kind) {
@@ -199,7 +270,12 @@ async function downloadFile(jobId, kind) {
   }
 
   const endpoint = kind === "image" ? "image" : "stl";
-  const response = await fetch(`${API_BASE}/relief/download/${endpoint}/${jobId}`);
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/relief/download/${endpoint}/${jobId}`);
+  } catch {
+    throw new Error("下载接口无法连接");
+  }
   if (!response.ok) {
     const data = await response.json().catch(() => null);
     throw new Error(data && data.error ? data.error : "下载失败");
@@ -246,18 +322,24 @@ uploadForm.addEventListener("submit", async (event) => {
     setStatus("queued");
     statusMessage.textContent = `任务创建成功，jobId: ${jobId}`;
     clearResultPreview("状态为 done 后，这里显示 depth image，并开放下载。");
+    startPolling(jobId);
   } catch (errorMessage) {
     statusMessage.textContent = `创建任务失败：${errorMessage.message}`;
     setStatus("failed");
+    stopPolling();
   }
 });
 
 queryJobBtn.addEventListener("click", async () => {
   try {
-    await queryJob(jobIdInput.value.trim());
+    const data = await queryJob(jobIdInput.value.trim());
+    if (POLLABLE_STATUSES.has(data.status)) {
+      startPolling(data.jobId || jobIdInput.value.trim());
+    }
   } catch (error) {
-    statusMessage.textContent = error.message;
+    statusMessage.textContent = `查询失败：${error.message}`;
     setStatus("idle");
+    stopPolling();
   }
 });
 
@@ -280,7 +362,9 @@ downloadStlBtn.addEventListener("click", async () => {
 function init() {
   setCurrentJobId("");
   setStatus("idle");
+  setPolling(false);
   showFileError("");
+  setUploadBoxImage("");
   setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, "", "选择图片后在这里显示。");
   clearResultPreview("状态为 done 后，这里显示 depth image，并开放下载。");
 }

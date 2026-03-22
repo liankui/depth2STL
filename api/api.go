@@ -22,6 +22,7 @@ func UploadHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
 		})
+		return
 	}
 
 	ext := filepath.Ext(file.Filename)

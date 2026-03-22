@@ -23,9 +23,7 @@ func main() {
 	}
 
 	router.Static("/frontend", "./frontend")
-	router.GET("/", func(c *gin.Context) {
-		c.File("./frontend/index.html")
-	})
+	router.StaticFile("/", "./frontend/index.html")
 
 	crontab()
 
