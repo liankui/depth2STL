@@ -1,382 +1,288 @@
 const DEFAULT_API_BASE = "http://localhost:31101/v1";
-const STORAGE_HISTORY_KEY = "depth2stl_job_history";
-const POLL_INTERVAL_MS = 2500;
-
-const uploadForm = document.getElementById("uploadForm");
-const uploadFileInput = document.getElementById("uploadFile");
-const jobIdInput = document.getElementById("jobIdInput");
-const queryJobBtn = document.getElementById("queryJobBtn");
-const downloadImageBtn = document.getElementById("downloadImageBtn");
-const downloadStlBtn = document.getElementById("downloadStlBtn");
-const deleteJobBtn = document.getElementById("deleteJobBtn");
-const refreshQueueBtn = document.getElementById("refreshQueueBtn");
-const autoRefreshCheckbox = document.getElementById("autoRefresh");
-const queueMetrics = document.getElementById("queueMetrics");
-const queueStatusDetail = document.getElementById("queueStatusDetail");
-const historyBody = document.getElementById("historyBody");
-const previewImage = document.getElementById("previewImage");
-const sourceImage = document.getElementById("sourceImage");
-const previewHint = document.getElementById("previewHint");
-const jobStatusBadge = document.getElementById("jobStatusBadge");
-const pollingFlag = document.getElementById("pollingFlag");
-const logEl = document.getElementById("log");
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 const API_BASE = ((window.APP_CONFIG && window.APP_CONFIG.apiBaseUrl) || DEFAULT_API_BASE).replace(/\/$/, "");
 
-let autoRefreshTimer = null;
-let jobPollTimer = null;
+const uploadForm = document.getElementById("uploadForm");
+const uploadFileInput = document.getElementById("uploadFile");
+const uploadTitle = document.getElementById("uploadTitle");
+const fileMeta = document.getElementById("fileMeta");
+const fileError = document.getElementById("fileError");
+const sourceFrame = document.getElementById("sourceFrame");
+const sourceImage = document.getElementById("sourceImage");
+const sourcePlaceholder = document.getElementById("sourcePlaceholder");
+const jobIdInput = document.getElementById("jobIdInput");
+const jobIdValue = document.getElementById("jobIdValue");
+const queryJobBtn = document.getElementById("queryJobBtn");
+const jobStatusBadge = document.getElementById("jobStatusBadge");
+const statusMessage = document.getElementById("statusMessage");
+const resultFrame = document.getElementById("resultFrame");
+const previewImage = document.getElementById("previewImage");
+const previewHint = document.getElementById("previewHint");
+const downloadImageBtn = document.getElementById("downloadImageBtn");
+const downloadStlBtn = document.getElementById("downloadStlBtn");
+
 let currentJobId = "";
-let previewObjectUrl = "";
 let sourceObjectUrl = "";
-let history = readHistory();
+let resultObjectUrl = "";
 
-function nowText() {
-  return new Date().toLocaleString();
-}
-
-function log(message) {
-  const line = document.createElement("div");
-  line.textContent = `[${nowText()}] ${message}`;
-  logEl.prepend(line);
-}
-
-function readHistory() {
-  try {
-    const raw = localStorage.getItem(STORAGE_HISTORY_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
+function formatSize(size) {
+  if (size < 1024 * 1024) {
+    return `${Math.max(1, Math.round(size / 1024))} KB`;
   }
+  return `${(size / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-function saveHistory() {
-  localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(history.slice(0, 100)));
-}
-
-function upsertJob(jobId, status = "unknown") {
-  const found = history.find((item) => item.jobId === jobId);
-  if (found) {
-    found.status = status;
-    found.updatedAt = nowText();
-  } else {
-    history.unshift({ jobId, status, updatedAt: nowText() });
+function setFrameImage(frame, img, placeholder, objectUrl, emptyText) {
+  if (objectUrl) {
+    img.src = objectUrl;
+    frame.classList.add("has-image");
+    placeholder.textContent = "";
+    return;
   }
-  saveHistory();
-  renderHistory();
+
+  img.removeAttribute("src");
+  frame.classList.remove("has-image");
+  placeholder.textContent = emptyText;
+}
+
+function setStatus(status) {
+  const safeStatus = status || "idle";
+  jobStatusBadge.textContent = safeStatus;
+  jobStatusBadge.className = `badge badge-${safeStatus}`;
+  const isDone = safeStatus === "done";
+  downloadImageBtn.disabled = !isDone;
+  downloadStlBtn.disabled = !isDone;
 }
 
 function setCurrentJobId(jobId) {
-  currentJobId = jobId;
-  jobIdInput.value = jobId;
+  currentJobId = jobId || "";
+  jobIdInput.value = currentJobId;
+  jobIdValue.textContent = currentJobId || "-";
 }
 
-function setStatusBadge(status) {
-  const finalStatus = status || "idle";
-  jobStatusBadge.textContent = finalStatus;
-  jobStatusBadge.className = `status-badge status-${finalStatus}`;
-  const done = finalStatus === "done";
-  downloadImageBtn.disabled = !done;
-  downloadStlBtn.disabled = !done;
+function showFileError(message) {
+  if (!message) {
+    fileError.textContent = "";
+    fileError.classList.add("hidden");
+    return;
+  }
+  fileError.textContent = message;
+  fileError.classList.remove("hidden");
 }
 
-function setPolling(active) {
-  pollingFlag.textContent = active ? "轮询中..." : "未轮询";
-  pollingFlag.classList.toggle("polling-active", active);
+function clearResultPreview(message) {
+  if (resultObjectUrl) {
+    URL.revokeObjectURL(resultObjectUrl);
+    resultObjectUrl = "";
+  }
+  setFrameImage(resultFrame, previewImage, previewHint, "", message);
 }
 
-function setSourcePreview(file) {
+function validateFile(file) {
+  if (!file) {
+    return "请先选择图片";
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    return "图片大小不能超过 10MB";
+  }
+  return "";
+}
+
+function updateSelectedFile() {
+  const file = uploadFileInput.files && uploadFileInput.files[0] ? uploadFileInput.files[0] : null;
+
   if (sourceObjectUrl) {
     URL.revokeObjectURL(sourceObjectUrl);
     sourceObjectUrl = "";
   }
+
   if (!file) {
-    sourceImage.removeAttribute("src");
+    uploadTitle.textContent = "选择图片";
+    fileMeta.textContent = "未选择文件";
+    showFileError("");
+    setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, "", "选择图片后在这里显示。");
     return;
   }
+
+  const error = validateFile(file);
+  if (error) {
+    uploadFileInput.value = "";
+    uploadTitle.textContent = "选择图片";
+    fileMeta.textContent = "未选择文件";
+    showFileError(error);
+    setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, "", "选择图片后在这里显示。");
+    return;
+  }
+
+  showFileError("");
+  uploadTitle.textContent = file.name;
+  fileMeta.textContent = formatSize(file.size);
   sourceObjectUrl = URL.createObjectURL(file);
-  sourceImage.src = sourceObjectUrl;
-}
-
-async function setResultPreview(jobId, status) {
-  if (previewObjectUrl) {
-    URL.revokeObjectURL(previewObjectUrl);
-    previewObjectUrl = "";
-  }
-
-  if (status !== "done") {
-    previewImage.removeAttribute("src");
-    previewHint.textContent = `任务 ${jobId} 当前状态：${status}`;
-    return;
-  }
-
-  const resp = await fetch(`${API_BASE}/relief/download/image/${jobId}`);
-  if (!resp.ok) {
-    previewImage.removeAttribute("src");
-    previewHint.textContent = `任务 ${jobId} 已完成，但图片读取失败`;
-    return;
-  }
-
-  const blob = await resp.blob();
-  previewObjectUrl = URL.createObjectURL(blob);
-  previewImage.src = previewObjectUrl;
-  previewHint.textContent = `任务 ${jobId} 已完成，可直接下载深度图和 STL。`;
-}
-
-function renderHistory() {
-  historyBody.innerHTML = "";
-  history.forEach((item) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td><button type="button" data-job-id="${item.jobId}" class="link-btn">${item.jobId}</button></td>
-      <td>${item.status}</td>
-      <td>${item.updatedAt}</td>
-    `;
-    historyBody.appendChild(tr);
-  });
-  historyBody.querySelectorAll(".link-btn").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const jobId = btn.dataset.jobId || "";
-      setCurrentJobId(jobId);
-      await queryAndRender(jobId);
-      if (jobStatusBadge.textContent === "queued" || jobStatusBadge.textContent === "processing") {
-        startPollingJob(jobId);
-      }
-    });
-  });
-}
-
-function makeMetric(label, value) {
-  return `
-    <div class="metric-item">
-      <div class="label">${label}</div>
-      <div class="value">${value}</div>
-    </div>
-  `;
-}
-
-function renderQueueStatusDetail(data) {
-  const queue = data.queue || {};
-  const runtime = data.runtime || {};
-  queueStatusDetail.innerHTML = `
-    <div class="queue-line">队列: queued=${queue.queued ?? 0}, processing=${queue.processing ?? 0}, done=${queue.done ?? 0}, failed=${queue.failed ?? 0}</div>
-    <div class="queue-line">运行时: queueLength=${runtime.queueLength ?? 0}, activeWorkers=${runtime.activeWorkers ?? 0}, maxQueueSize=${runtime.maxQueueSize ?? 0}</div>
-  `;
-}
-
-function getJobId() {
-  return jobIdInput.value.trim();
+  setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, sourceObjectUrl, "");
 }
 
 async function requestJson(path, options = {}) {
-  const resp = await fetch(`${API_BASE}${path}`, options);
-  const text = await resp.text();
+  const response = await fetch(`${API_BASE}${path}`, options);
+  const text = await response.text();
   let data;
+
   try {
     data = text ? JSON.parse(text) : {};
   } catch {
     data = text;
   }
-  if (!resp.ok) {
-    const msg = typeof data === "object" && data && data.error ? data.error : resp.statusText;
-    throw new Error(`${resp.status} ${msg}`);
+
+  if (!response.ok) {
+    const message = typeof data === "object" && data && data.error ? data.error : `${response.status} ${response.statusText}`;
+    throw new Error(message);
   }
+
   return data;
 }
 
-async function refreshQueueStatus() {
-  try {
-    const data = await requestJson("/relief/queue/status");
-    queueMetrics.innerHTML = [
-      makeMetric("总任务", data.totalJobs ?? 0),
-      makeMetric("排队", data.queue?.queued ?? 0),
-      makeMetric("处理中", data.queue?.processing ?? 0),
-      makeMetric("成功", data.queue?.done ?? 0),
-      makeMetric("失败", data.queue?.failed ?? 0),
-      makeMetric("队列长度", data.runtime?.queueLength ?? 0),
-      makeMetric("活跃 Worker", data.runtime?.activeWorkers ?? 0),
-      makeMetric("队列容量", data.runtime?.maxQueueSize ?? 0),
-    ].join("");
-    renderQueueStatusDetail(data);
-  } catch (err) {
-    log(`队列刷新失败: ${err.message}`);
+async function loadResultPreview(jobId) {
+  const response = await fetch(`${API_BASE}/relief/download/image/${jobId}`);
+  if (!response.ok) {
+    throw new Error("image 读取失败");
   }
+
+  if (resultObjectUrl) {
+    URL.revokeObjectURL(resultObjectUrl);
+  }
+
+  const blob = await response.blob();
+  resultObjectUrl = URL.createObjectURL(blob);
+  setFrameImage(resultFrame, previewImage, previewHint, resultObjectUrl, "");
 }
 
-async function queryAndRender(jobId) {
+function getStatusText(status, error) {
+  if (status === "queued") {
+    return "任务已创建，等待处理。";
+  }
+  if (status === "processing") {
+    return "任务处理中，请继续使用 jobId 查询。";
+  }
+  if (status === "done") {
+    return "任务已完成，可以下载 image 和 STL。";
+  }
+  if (status === "failed") {
+    return error ? `任务失败：${error}` : "任务失败。";
+  }
+  return "创建任务后会返回 jobId，可继续查询任务状态。";
+}
+
+async function queryJob(jobId) {
   if (!jobId) {
     throw new Error("请先输入 jobId");
   }
+
   const data = await requestJson(`/relief/${jobId}`);
-  const status = data.status || "unknown";
-  setStatusBadge(status);
-  upsertJob(jobId, status);
-  await setResultPreview(jobId, status);
-  log(`任务 ${jobId} 状态: ${status}`);
-  return data;
+  const status = data.status || "idle";
+
+  setCurrentJobId(jobId);
+  setStatus(status);
+  statusMessage.textContent = getStatusText(status, data.error);
+
+  if (status === "done") {
+    await loadResultPreview(jobId);
+  } else if (status === "failed") {
+    clearResultPreview(data.error || "任务失败，当前无可下载结果。");
+  } else {
+    clearResultPreview(`任务 ${jobId} 当前状态：${status}`);
+  }
 }
 
 async function downloadFile(jobId, kind) {
   if (!jobId) {
     throw new Error("请先输入 jobId");
   }
+
   const endpoint = kind === "image" ? "image" : "stl";
-  const resp = await fetch(`${API_BASE}/relief/download/${endpoint}/${jobId}`);
-  if (!resp.ok) {
-    const data = await resp.json().catch(() => null);
-    throw new Error(data?.error || `${resp.status} ${resp.statusText}`);
+  const response = await fetch(`${API_BASE}/relief/download/${endpoint}/${jobId}`);
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data && data.error ? data.error : "下载失败");
   }
-  const blob = await resp.blob();
-  const ext = kind === "image" ? "png" : "stl";
-  const a = document.createElement("a");
+
+  const blob = await response.blob();
   const objectUrl = URL.createObjectURL(blob);
-  a.href = objectUrl;
-  a.download = `${jobId}.${ext}`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  const link = document.createElement("a");
+  const ext = kind === "image" ? "png" : "stl";
+  link.href = objectUrl;
+  link.download = `${jobId}.${ext}`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
   URL.revokeObjectURL(objectUrl);
 }
 
-function setupAutoRefresh() {
-  if (autoRefreshTimer) {
-    clearInterval(autoRefreshTimer);
-    autoRefreshTimer = null;
-  }
-  if (autoRefreshCheckbox.checked) {
-    autoRefreshTimer = setInterval(refreshQueueStatus, 5000);
-  }
-}
+uploadFileInput.addEventListener("change", updateSelectedFile);
 
-function stopPollingJob() {
-  if (jobPollTimer) {
-    clearInterval(jobPollTimer);
-    jobPollTimer = null;
-  }
-  setPolling(false);
-}
+uploadForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
 
-function startPollingJob(jobId) {
-  if (!jobId) {
-    return;
-  }
-  setCurrentJobId(jobId);
-  stopPollingJob();
-  setPolling(true);
-
-  const poll = async () => {
-    try {
-      const data = await queryAndRender(jobId);
-      if (data.status === "done" || data.status === "failed") {
-        stopPollingJob();
-      }
-    } catch (err) {
-      log(`轮询失败: ${err.message}`);
-      stopPollingJob();
-    }
-  };
-
-  poll();
-  jobPollTimer = setInterval(poll, POLL_INTERVAL_MS);
-}
-
-uploadFileInput.addEventListener("change", () => {
   const file = uploadFileInput.files && uploadFileInput.files[0] ? uploadFileInput.files[0] : null;
-  setSourcePreview(file);
-});
-
-uploadForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const file = uploadFileInput.files && uploadFileInput.files[0] ? uploadFileInput.files[0] : null;
-  if (!file) {
-    log("请先选择图片");
+  const error = validateFile(file);
+  if (error) {
+    showFileError(error);
     return;
   }
 
-  const form = new FormData();
-  form.append("file", file);
+  const formData = new FormData();
+  formData.append("file", file);
 
   try {
-    const data = await requestJson("/relief", { method: "POST", body: form });
+    const data = await requestJson("/relief", {
+      method: "POST",
+      body: formData,
+    });
     const jobId = data.jobId || data.id;
     if (!jobId) {
-      throw new Error("响应缺少 jobId");
+      throw new Error("响应中缺少 jobId");
     }
+
     setCurrentJobId(jobId);
-    setStatusBadge("queued");
-    upsertJob(jobId, "queued");
-    previewHint.textContent = `任务 ${jobId} 已创建，等待处理...`;
-    log(`任务创建成功: ${jobId}`);
-    startPollingJob(jobId);
-    refreshQueueStatus();
-  } catch (err) {
-    log(`创建任务失败: ${err.message}`);
+    setStatus("queued");
+    statusMessage.textContent = `任务创建成功，jobId: ${jobId}`;
+    clearResultPreview("状态为 done 后，这里显示 depth image，并开放下载。");
+  } catch (errorMessage) {
+    statusMessage.textContent = `创建任务失败：${errorMessage.message}`;
+    setStatus("failed");
   }
 });
 
 queryJobBtn.addEventListener("click", async () => {
   try {
-    const jobId = getJobId();
-    const data = await queryAndRender(jobId);
-    if (data.status === "queued" || data.status === "processing") {
-      startPollingJob(jobId);
-    } else {
-      stopPollingJob();
-    }
-  } catch (err) {
-    log(`查询失败: ${err.message}`);
+    await queryJob(jobIdInput.value.trim());
+  } catch (error) {
+    statusMessage.textContent = error.message;
+    setStatus("idle");
   }
 });
 
 downloadImageBtn.addEventListener("click", async () => {
   try {
-    await downloadFile(getJobId(), "image");
-    log(`深度图下载完成`);
-  } catch (err) {
-    log(`下载深度图失败: ${err.message}`);
+    await downloadFile(currentJobId || jobIdInput.value.trim(), "image");
+  } catch (error) {
+    statusMessage.textContent = `下载 image 失败：${error.message}`;
   }
 });
 
 downloadStlBtn.addEventListener("click", async () => {
   try {
-    await downloadFile(getJobId(), "stl");
-    log(`STL 下载完成`);
-  } catch (err) {
-    log(`下载 STL 失败: ${err.message}`);
+    await downloadFile(currentJobId || jobIdInput.value.trim(), "stl");
+  } catch (error) {
+    statusMessage.textContent = `下载 STL 失败：${error.message}`;
   }
 });
-
-deleteJobBtn.addEventListener("click", async () => {
-  const jobId = getJobId();
-  if (!jobId) {
-    log("请先输入 jobId");
-    return;
-  }
-  try {
-    await requestJson(`/relief/queue/${jobId}`, { method: "DELETE" });
-    upsertJob(jobId, "deleted");
-    setStatusBadge("deleted");
-    previewImage.removeAttribute("src");
-    previewHint.textContent = `任务 ${jobId} 已删除`;
-    if (currentJobId === jobId) {
-      stopPollingJob();
-    }
-    log(`任务已删除: ${jobId}`);
-    refreshQueueStatus();
-  } catch (err) {
-    log(`删除失败: ${err.message}`);
-  }
-});
-
-refreshQueueBtn.addEventListener("click", refreshQueueStatus);
-autoRefreshCheckbox.addEventListener("change", setupAutoRefresh);
 
 function init() {
-  setStatusBadge("idle");
-  setPolling(false);
-  renderHistory();
-  refreshQueueStatus();
-  setupAutoRefresh();
-  log(`前端初始化完成，API Base: ${API_BASE}`);
+  setCurrentJobId("");
+  setStatus("idle");
+  showFileError("");
+  setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, "", "选择图片后在这里显示。");
+  clearResultPreview("状态为 done 后，这里显示 depth image，并开放下载。");
 }
 
 init();

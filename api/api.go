@@ -17,7 +17,13 @@ import (
 var pwd, _ = os.Getwd()
 
 func UploadHandler(c *gin.Context) {
-	file, _ := c.FormFile("file")
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+	}
+
 	ext := filepath.Ext(file.Filename)
 	filename := strings.TrimSuffix(file.Filename, ext)
 
@@ -29,7 +35,7 @@ func UploadHandler(c *gin.Context) {
 	imgPath := filepath.Join(tmpDir, jobID+ext)
 	stlPath := filepath.Join(tmpDir, jobID+".stl")
 
-	err := c.SaveUploadedFile(file, inputPath)
+	err = c.SaveUploadedFile(file, inputPath)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
