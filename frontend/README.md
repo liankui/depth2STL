@@ -5,12 +5,8 @@
 ## 使用
 
 1. 启动后端服务（默认监听 `31101`）。
-2. 在 `frontend` 目录启动静态服务，例如：
-   ```bash
-   python3 -m http.server 5173
-   ```
-3. 打开 `http://localhost:5173`。
-4. 页面会读取 `config.js` 里的 `apiBaseUrl`（默认是 `http://localhost:31101/v1`）。
+2. 直接打开 `http://localhost:31101/`（或 `http://localhost:31101/frontend/`）。
+3. 页面会读取 `config.js` 里的 `apiBaseUrl`（默认是 `http://localhost:31101/v1`）。
 
 ## 支持接口
 

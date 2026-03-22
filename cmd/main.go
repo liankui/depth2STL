@@ -22,6 +22,11 @@ func main() {
 		v1.DELETE("/relief/queue/:jobId", api.DeleteJobHandler)           // 删除任务
 	}
 
+	router.Static("/frontend", "./frontend")
+	router.GET("/", func(c *gin.Context) {
+		c.File("./frontend/index.html")
+	})
+
 	crontab()
 
 	// By default it serves on :8080 unless a
