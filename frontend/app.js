@@ -5,13 +5,10 @@ const POLLABLE_STATUSES = new Set(["queued", "processing"]);
 
 const uploadForm = document.getElementById("uploadForm");
 const uploadFileInput = document.getElementById("uploadFile");
-const uploadBox = document.getElementById("uploadBox");
-const uploadPreviewImage = document.getElementById("uploadPreviewImage");
 const uploadTitle = document.getElementById("uploadTitle");
-const uploadEmptyState = document.getElementById("uploadEmptyState");
 const fileMeta = document.getElementById("fileMeta");
 const fileError = document.getElementById("fileError");
-const pollingState = document.getElementById("pollingState");
+const sourceFrame = document.getElementById("sourceFrame");
 const sourceImage = document.getElementById("sourceImage");
 const sourcePlaceholder = document.getElementById("sourcePlaceholder");
 const jobIdInput = document.getElementById("jobIdInput");
@@ -50,49 +47,19 @@ function setFrameImage(frame, img, placeholder, objectUrl, emptyText) {
   placeholder.textContent = emptyText;
 }
 
-function setCompareBaseImage(objectUrl) {
-  if (objectUrl) {
-    sourceImage.src = objectUrl;
-    resultFrame.classList.add("has-image", "has-base");
-    sourcePlaceholder.textContent = "";
-    return;
-  }
-
-  sourceImage.removeAttribute("src");
-  resultFrame.classList.remove("has-base");
-  sourcePlaceholder.textContent = "选择图片后可在这里开始对比。";
-}
-
-function setUploadBoxImage(objectUrl) {
-  if (objectUrl) {
-    uploadPreviewImage.src = objectUrl;
-    uploadBox.classList.add("has-image");
-    uploadEmptyState.classList.add("hidden");
-    return;
-  }
-
-  uploadPreviewImage.removeAttribute("src");
-  uploadBox.classList.remove("has-image");
-  uploadEmptyState.classList.remove("hidden");
-}
-
 function setStatus(status) {
   const safeStatus = status || "idle";
   jobStatusBadge.textContent = safeStatus;
   jobStatusBadge.className = `badge badge-${safeStatus}`;
-  const isDone = safeStatus === "done";
-  downloadImageBtn.disabled = !isDone;
-  downloadStlBtn.disabled = !isDone;
+  const done = safeStatus === "done";
+  downloadImageBtn.disabled = !done;
+  downloadStlBtn.disabled = !done;
 }
 
 function setCurrentJobId(jobId) {
   currentJobId = jobId || "";
   jobIdInput.value = currentJobId;
   jobIdValue.textContent = currentJobId || "-";
-}
-
-function setPolling(active) {
-  pollingState.textContent = active ? "自动查询中" : "未轮询";
 }
 
 function showFileError(message) {
@@ -105,22 +72,19 @@ function showFileError(message) {
   fileError.classList.remove("hidden");
 }
 
-function clearResultPreview(message) {
-  if (resultObjectUrl) {
-    URL.revokeObjectURL(resultObjectUrl);
-    resultObjectUrl = "";
-  }
-  previewImage.removeAttribute("src");
-  resultFrame.classList.remove("has-result");
-  previewHint.textContent = message;
-}
-
 function stopPolling() {
   if (jobPollTimer) {
     clearInterval(jobPollTimer);
     jobPollTimer = null;
   }
-  setPolling(false);
+}
+
+function clearResultPreview(message) {
+  if (resultObjectUrl) {
+    URL.revokeObjectURL(resultObjectUrl);
+    resultObjectUrl = "";
+  }
+  setFrameImage(resultFrame, previewImage, previewHint, "", message);
 }
 
 function validateFile(file) {
@@ -145,8 +109,7 @@ function updateSelectedFile() {
     uploadTitle.textContent = "选择图片";
     fileMeta.textContent = "未选择文件";
     showFileError("");
-    setUploadBoxImage("");
-    setCompareBaseImage("");
+    setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, "", "选择图片后这里显示原图。");
     return;
   }
 
@@ -156,8 +119,7 @@ function updateSelectedFile() {
     uploadTitle.textContent = "选择图片";
     fileMeta.textContent = "未选择文件";
     showFileError(error);
-    setUploadBoxImage("");
-    setCompareBaseImage("");
+    setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, "", "选择图片后这里显示原图。");
     return;
   }
 
@@ -165,8 +127,7 @@ function updateSelectedFile() {
   uploadTitle.textContent = file.name;
   fileMeta.textContent = formatSize(file.size);
   sourceObjectUrl = URL.createObjectURL(file);
-  setUploadBoxImage(sourceObjectUrl);
-  setCompareBaseImage(sourceObjectUrl);
+  setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, sourceObjectUrl, "");
 }
 
 async function requestJson(path, options = {}) {
@@ -174,11 +135,11 @@ async function requestJson(path, options = {}) {
   try {
     response = await fetch(`${API_BASE}${path}`, options);
   } catch {
-    throw new Error("接口无法连接，请确认服务已启动并从同一个服务地址打开页面");
+    throw new Error("接口无法连接，请确认服务已启动");
   }
+
   const text = await response.text();
   let data;
-
   try {
     data = text ? JSON.parse(text) : {};
   } catch {
@@ -203,6 +164,7 @@ async function loadResultPreview(jobId) {
   } catch {
     throw new Error("生成图接口无法连接");
   }
+
   if (!response.ok) {
     const data = await response.json().catch(() => null);
     throw new Error(data && data.error ? data.error : "image 读取失败");
@@ -214,9 +176,7 @@ async function loadResultPreview(jobId) {
 
   const blob = await response.blob();
   resultObjectUrl = URL.createObjectURL(blob);
-  previewImage.src = resultObjectUrl;
-  resultFrame.classList.add("has-result");
-  previewHint.textContent = "";
+  setFrameImage(resultFrame, previewImage, previewHint, resultObjectUrl, "");
 }
 
 function getStatusText(status, error) {
@@ -232,7 +192,7 @@ function getStatusText(status, error) {
   if (status === "failed") {
     return error ? `任务失败：${error}` : "任务失败。";
   }
-  return "创建任务后会返回 jobId，可继续查询任务状态。";
+  return "创建任务后会返回 jobId，并自动开始查询。";
 }
 
 async function queryJob(jobId) {
@@ -262,7 +222,6 @@ async function queryJob(jobId) {
 
 function startPolling(jobId) {
   stopPolling();
-  setPolling(true);
 
   const poll = async () => {
     try {
@@ -292,6 +251,7 @@ async function downloadFile(jobId, kind) {
   } catch {
     throw new Error("下载接口无法连接");
   }
+
   if (!response.ok) {
     const data = await response.json().catch(() => null);
     throw new Error(data && data.error ? data.error : "下载失败");
@@ -300,9 +260,8 @@ async function downloadFile(jobId, kind) {
   const blob = await response.blob();
   const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  const ext = kind === "image" ? "png" : "stl";
   link.href = objectUrl;
-  link.download = `${jobId}.${ext}`;
+  link.download = `${jobId}.${kind === "image" ? "png" : "stl"}`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -325,10 +284,7 @@ uploadForm.addEventListener("submit", async (event) => {
   formData.append("file", file);
 
   try {
-    const data = await requestJson("/relief", {
-      method: "POST",
-      body: formData,
-    });
+    const data = await requestJson("/relief", { method: "POST", body: formData });
     const jobId = data.jobId || data.id;
     if (!jobId) {
       throw new Error("响应中缺少 jobId");
@@ -337,11 +293,11 @@ uploadForm.addEventListener("submit", async (event) => {
     setCurrentJobId(jobId);
     setStatus("queued");
     statusMessage.textContent = `任务创建成功，jobId: ${jobId}`;
-    clearResultPreview("状态为 done 后，这里显示 depth image，并开放下载。");
+    clearResultPreview("正在生成，请稍候。");
     startPolling(jobId);
-  } catch (errorMessage) {
-    statusMessage.textContent = `创建任务失败：${errorMessage.message}`;
+  } catch (requestError) {
     setStatus("failed");
+    statusMessage.textContent = `创建任务失败：${requestError.message}`;
     stopPolling();
   }
 });
@@ -352,9 +308,9 @@ queryJobBtn.addEventListener("click", async () => {
     if (POLLABLE_STATUSES.has(data.status)) {
       startPolling(data.jobId || jobIdInput.value.trim());
     }
-  } catch (error) {
-    statusMessage.textContent = `查询失败：${error.message}`;
+  } catch (queryError) {
     setStatus("idle");
+    statusMessage.textContent = `查询失败：${queryError.message}`;
     stopPolling();
   }
 });
@@ -362,27 +318,25 @@ queryJobBtn.addEventListener("click", async () => {
 downloadImageBtn.addEventListener("click", async () => {
   try {
     await downloadFile(currentJobId || jobIdInput.value.trim(), "image");
-  } catch (error) {
-    statusMessage.textContent = `下载 image 失败：${error.message}`;
+  } catch (downloadError) {
+    statusMessage.textContent = `下载 image 失败：${downloadError.message}`;
   }
 });
 
 downloadStlBtn.addEventListener("click", async () => {
   try {
     await downloadFile(currentJobId || jobIdInput.value.trim(), "stl");
-  } catch (error) {
-    statusMessage.textContent = `下载 STL 失败：${error.message}`;
+  } catch (downloadError) {
+    statusMessage.textContent = `下载 STL 失败：${downloadError.message}`;
   }
 });
 
 function init() {
   setCurrentJobId("");
   setStatus("idle");
-  setPolling(false);
   showFileError("");
-  setUploadBoxImage("");
-  setCompareBaseImage("");
-  clearResultPreview("状态为 done 后，这里显示生成图，并与原图侧边对齐对比。");
+  setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, "", "选择图片后这里显示原图。");
+  clearResultPreview("状态为 done 后，这里显示生成图。");
 }
 
 init();
