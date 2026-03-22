@@ -12,6 +12,12 @@ const sourceImage = document.getElementById("sourceImage");
 const sourcePlaceholder = document.getElementById("sourcePlaceholder");
 const createJobBtn = document.getElementById("createJobBtn");
 const jobIdInput = document.getElementById("jobIdInput");
+const modelWidthInput = document.getElementById("modelWidthInput");
+const modelThicknessInput = document.getElementById("modelThicknessInput");
+const baseThicknessInput = document.getElementById("baseThicknessInput");
+const detailLevelInput = document.getElementById("detailLevelInput");
+const skipConvInput = document.getElementById("skipConvInput");
+const invertInput = document.getElementById("invertInput");
 const jobStatusBadge = document.getElementById("jobStatusBadge");
 const statusMessage = document.getElementById("statusMessage");
 const resultFrame = document.getElementById("resultFrame");
@@ -101,6 +107,48 @@ function validateFile(file) {
     return "图片大小不能超过 10MB";
   }
   return "";
+}
+
+function parsePositiveNumber(input, label, minValue, allowZero = false) {
+  const rawValue = input.value.trim();
+  if (!rawValue) {
+    throw new Error(`请填写${label}`);
+  }
+
+  const value = Number(rawValue);
+  if (!Number.isFinite(value)) {
+    throw new Error(`${label}格式无效`);
+  }
+
+  if (allowZero) {
+    if (value < minValue) {
+      throw new Error(`${label}不能小于 ${minValue}`);
+    }
+  } else if (value <= minValue) {
+    throw new Error(`${label}必须大于 ${minValue}`);
+  }
+
+  return value;
+}
+
+function getCreateOptions() {
+  const modelWidth = parsePositiveNumber(modelWidthInput, "模型宽度", 0);
+  const modelThickness = parsePositiveNumber(modelThicknessInput, "模型高度", 0);
+  const baseThickness = parsePositiveNumber(baseThicknessInput, "底座高度", 0, true);
+  const detailLevel = Number(detailLevelInput.value);
+
+  if (![1, 2, 3].includes(detailLevel)) {
+    throw new Error("精度档位仅支持 1、2、3");
+  }
+
+  return {
+    modelWidth,
+    modelThickness,
+    baseThickness,
+    detailLevel,
+    skipConv: skipConvInput.checked,
+    invert: invertInput.checked,
+  };
 }
 
 function updateSelectedFile() {
@@ -295,8 +343,23 @@ uploadForm.addEventListener("submit", async (event) => {
     return;
   }
 
+  let createOptions;
+  try {
+    createOptions = getCreateOptions();
+  } catch (validationError) {
+    showFileError(validationError.message);
+    return;
+  }
+
+  showFileError("");
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("modelWidth", String(createOptions.modelWidth));
+  formData.append("modelThickness", String(createOptions.modelThickness));
+  formData.append("baseThickness", String(createOptions.baseThickness));
+  formData.append("detailLevel", String(createOptions.detailLevel));
+  formData.append("skipConv", String(createOptions.skipConv));
+  formData.append("invert", String(createOptions.invert));
 
   try {
     const data = await requestJson("/relief", { method: "POST", body: formData });
@@ -308,7 +371,7 @@ uploadForm.addEventListener("submit", async (event) => {
     setCurrentJobId(jobId);
     setStatus("queued");
     createJobBtn.classList.add("is-downloaded");
-    statusMessage.textContent = `任务已创建，jobId: ${jobId}`;
+    statusMessage.textContent = `任务已创建，jobId: ${jobId}，宽 ${createOptions.modelWidth}mm，厚 ${createOptions.modelThickness}mm，底座 ${createOptions.baseThickness}mm，精度 ${createOptions.detailLevel}`;
     clearResultPreview("处理中...");
     startPolling(jobId);
   } catch (requestError) {

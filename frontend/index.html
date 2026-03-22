@@ -19,6 +19,73 @@
           <p id="statusMessage" class="message status-line">上传后会创建任务并持续查询状态。</p>
         </div>
 
+        <form id="uploadForm" class="upload-form">
+          <div class="frame-toolbar">
+            <input id="uploadFile" type="file" accept="image/png,image/jpeg,image/webp" required />
+            <input id="jobIdInput" type="hidden" />
+          </div>
+          <section class="settings-panel" aria-labelledby="settingsTitle">
+            <div class="settings-head">
+              <div>
+                <p id="settingsTitle" class="settings-title">模型参数</p>
+                <p class="settings-subtitle">上传后将和图片一起提交到创建任务接口。</p>
+              </div>
+              <span class="meta">可选，未填写使用默认值</span>
+            </div>
+            <div class="settings-grid">
+              <label class="field">
+                <span class="field-label">模型宽度</span>
+                <div class="field-input">
+                  <input id="modelWidthInput" name="modelWidth" type="number" min="1" step="0.1" value="50" />
+                  <span class="field-unit">mm</span>
+                </div>
+              </label>
+              <label class="field">
+                <span class="field-label">模型高度</span>
+                <div class="field-input">
+                  <input id="modelThicknessInput" name="modelThickness" type="number" min="0.1" step="0.1" value="5" />
+                  <span class="field-unit">mm</span>
+                </div>
+              </label>
+              <label class="field">
+                <span class="field-label">底座高度</span>
+                <div class="field-input">
+                  <input id="baseThicknessInput" name="baseThickness" type="number" min="0" step="0.1" value="2" />
+                  <span class="field-unit">mm</span>
+                </div>
+              </label>
+              <label class="field">
+                <span class="field-label">精度档位</span>
+                <div class="field-input field-input-select">
+                  <select id="detailLevelInput" name="detailLevel">
+                    <option value="1">1 · 普通</option>
+                    <option value="2" selected>2 · 推荐</option>
+                    <option value="3">3 · 高精度</option>
+                  </select>
+                </div>
+              </label>
+            </div>
+            <div class="toggle-grid">
+              <label class="toggle-card">
+                <input id="skipConvInput" name="skipConv" type="checkbox" />
+                <span class="toggle-indicator" aria-hidden="true"></span>
+                <span class="toggle-copy">
+                  <strong>跳过深度图处理</strong>
+                  <span>直接使用上传图参与后续处理。</span>
+                </span>
+              </label>
+              <label class="toggle-card">
+                <input id="invertInput" name="invert" type="checkbox" />
+                <span class="toggle-indicator" aria-hidden="true"></span>
+                <span class="toggle-copy">
+                  <strong>反转浮雕</strong>
+                  <span>切换凸起和凹陷的方向。</span>
+                </span>
+              </label>
+            </div>
+          </section>
+        </form>
+
         <section class="frame-grid">
           <article class="frame-card">
             <div class="frame-head">
@@ -27,12 +94,6 @@
                 <span id="fileMeta" class="meta">未选择文件</span>
                 <button id="createJobBtn" type="submit" form="uploadForm" class="secondary">创建任务</button>
               </div>
-            </div>
-            <div class="frame-toolbar">
-              <form id="uploadForm" class="frame-toolbar-group">
-                <input id="uploadFile" type="file" accept="image/png,image/jpeg,image/webp" required />
-                <input id="jobIdInput" type="hidden" />
-              </form>
             </div>
             <label id="sourceFrame" class="image-frame upload-frame" for="uploadFile">
               <img id="sourceImage" class="frame-image" alt="上传图片预览" />

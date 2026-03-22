@@ -27,7 +27,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -75,13 +76,6 @@ input {
   display: none;
 }
 
-.frame-toolbar-group {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  min-width: 0;
-}
-
 .toolbar-status {
   justify-content: flex-end;
   flex-shrink: 0;
@@ -91,7 +85,9 @@ input {
   display: none;
 }
 
-input[type="text"] {
+input[type="text"],
+input[type="number"],
+select {
   width: 100%;
   min-width: 0;
   padding: 9px 12px;
@@ -100,6 +96,13 @@ input[type="text"] {
   background: #fff;
   color: var(--text);
   font-size: 0.95rem;
+}
+
+input[type="number"]:focus,
+select:focus {
+  outline: 0;
+  border-color: rgba(47, 91, 234, 0.55);
+  box-shadow: 0 0 0 4px rgba(47, 91, 234, 0.12);
 }
 
 button {
@@ -208,6 +211,12 @@ button:disabled {
   background: rgba(252, 253, 255, 0.96);
   display: flex;
   flex-direction: column;
+}
+
+.upload-form {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 18px;
 }
 
 .frame-head {
@@ -416,16 +425,193 @@ button:disabled {
   display: none;
 }
 
+.settings-panel {
+  border: 1px solid rgba(47, 91, 234, 0.12);
+  border-radius: 18px;
+  padding: 20px;
+  background:
+    linear-gradient(180deg, rgba(244, 247, 255, 0.92), rgba(255, 255, 255, 0.98)),
+    radial-gradient(circle at top right, rgba(47, 91, 234, 0.08), transparent 32%);
+  box-shadow: 0 14px 34px rgba(18, 31, 59, 0.06);
+}
+
+.settings-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.settings-title {
+  margin: 0 0 6px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.settings-subtitle {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field-label {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.field-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.field-input input,
+.field-input select {
+  border: 0;
+  padding: 8px 10px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.field-input input:focus,
+.field-input select:focus {
+  box-shadow: none;
+}
+
+.field-unit {
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: #f3f6fd;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.field-input-select {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.toggle-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.88);
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.toggle-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(47, 91, 234, 0.2);
+}
+
+.toggle-card input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toggle-indicator {
+  width: 44px;
+  height: 26px;
+  border-radius: 999px;
+  background: #d7deed;
+  position: relative;
+  transition: background 0.18s ease;
+}
+
+.toggle-indicator::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 3px 9px rgba(17, 30, 61, 0.18);
+  transition: transform 0.18s ease;
+}
+
+.toggle-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.toggle-copy strong {
+  font-size: 0.95rem;
+}
+
+.toggle-copy span {
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.toggle-card:has(input:checked) {
+  border-color: rgba(47, 91, 234, 0.26);
+  box-shadow: 0 12px 26px rgba(47, 91, 234, 0.08);
+}
+
+.toggle-card:has(input:checked) .toggle-indicator {
+  background: var(--primary);
+}
+
+.toggle-card:has(input:checked) .toggle-indicator::after {
+  transform: translateX(18px);
+}
+
 @media (max-width: 920px) {
   .frame-grid,
   .frame-toolbar {
     grid-template-columns: 1fr;
   }
 
-  .frame-toolbar-group,
   .toolbar-status {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .settings-grid,
+  .toggle-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-head {
+    flex-direction: column;
   }
 
   button {

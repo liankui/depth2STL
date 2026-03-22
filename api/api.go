@@ -35,6 +35,19 @@ func parseIntForm(c *gin.Context, key string, defaultValue int) (int, error) {
 	return strconv.Atoi(value)
 }
 
+func parseIntFormWithAliases(c *gin.Context, defaultValue int, keys ...string) (int, error) {
+	for _, key := range keys {
+		value := strings.TrimSpace(c.PostForm(key))
+		if value == "" {
+			continue
+		}
+
+		return strconv.Atoi(value)
+	}
+
+	return defaultValue, nil
+}
+
 func parseBoolForm(c *gin.Context, key string, defaultValue bool) (bool, error) {
 	value := strings.TrimSpace(c.PostForm(key))
 	if value == "" {
@@ -75,9 +88,9 @@ func CreateHandler(c *gin.Context) {
 		return
 	}
 
-	detailLevel, err := parseIntForm(c, "detailLevel", 1)
+	detailLevel, err := parseIntFormWithAliases(c, 1, "detailLevel", "subSample")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid subSample"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid detailLevel"})
 		return
 	}
 
