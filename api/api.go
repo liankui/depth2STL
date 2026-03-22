@@ -16,7 +16,7 @@ import (
 
 var pwd, _ = os.Getwd()
 
-func UploadHandler(c *gin.Context) {
+func CreateHandler(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
