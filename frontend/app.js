@@ -12,7 +12,6 @@ const uploadEmptyState = document.getElementById("uploadEmptyState");
 const fileMeta = document.getElementById("fileMeta");
 const fileError = document.getElementById("fileError");
 const pollingState = document.getElementById("pollingState");
-const sourceFrame = document.getElementById("sourceFrame");
 const sourceImage = document.getElementById("sourceImage");
 const sourcePlaceholder = document.getElementById("sourcePlaceholder");
 const jobIdInput = document.getElementById("jobIdInput");
@@ -49,6 +48,19 @@ function setFrameImage(frame, img, placeholder, objectUrl, emptyText) {
   img.removeAttribute("src");
   frame.classList.remove("has-image");
   placeholder.textContent = emptyText;
+}
+
+function setCompareBaseImage(objectUrl) {
+  if (objectUrl) {
+    sourceImage.src = objectUrl;
+    resultFrame.classList.add("has-image", "has-base");
+    sourcePlaceholder.textContent = "";
+    return;
+  }
+
+  sourceImage.removeAttribute("src");
+  resultFrame.classList.remove("has-base");
+  sourcePlaceholder.textContent = "选择图片后可在这里开始对比。";
 }
 
 function setUploadBoxImage(objectUrl) {
@@ -98,7 +110,9 @@ function clearResultPreview(message) {
     URL.revokeObjectURL(resultObjectUrl);
     resultObjectUrl = "";
   }
-  setFrameImage(resultFrame, previewImage, previewHint, "", message);
+  previewImage.removeAttribute("src");
+  resultFrame.classList.remove("has-result");
+  previewHint.textContent = message;
 }
 
 function stopPolling() {
@@ -132,7 +146,7 @@ function updateSelectedFile() {
     fileMeta.textContent = "未选择文件";
     showFileError("");
     setUploadBoxImage("");
-    setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, "", "选择图片后在这里显示。");
+    setCompareBaseImage("");
     return;
   }
 
@@ -143,7 +157,7 @@ function updateSelectedFile() {
     fileMeta.textContent = "未选择文件";
     showFileError(error);
     setUploadBoxImage("");
-    setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, "", "选择图片后在这里显示。");
+    setCompareBaseImage("");
     return;
   }
 
@@ -152,7 +166,7 @@ function updateSelectedFile() {
   fileMeta.textContent = formatSize(file.size);
   sourceObjectUrl = URL.createObjectURL(file);
   setUploadBoxImage(sourceObjectUrl);
-  setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, sourceObjectUrl, "");
+  setCompareBaseImage(sourceObjectUrl);
 }
 
 async function requestJson(path, options = {}) {
@@ -200,7 +214,9 @@ async function loadResultPreview(jobId) {
 
   const blob = await response.blob();
   resultObjectUrl = URL.createObjectURL(blob);
-  setFrameImage(resultFrame, previewImage, previewHint, resultObjectUrl, "");
+  previewImage.src = resultObjectUrl;
+  resultFrame.classList.add("has-result");
+  previewHint.textContent = "";
 }
 
 function getStatusText(status, error) {
@@ -208,10 +224,10 @@ function getStatusText(status, error) {
     return "任务已创建，等待处理。";
   }
   if (status === "processing") {
-    return "任务处理中，请继续使用 jobId 查询。";
+    return "任务处理中，页面会继续自动查询。";
   }
   if (status === "done") {
-    return "任务已完成，可以下载 image 和 STL。";
+    return "任务已完成，可以查看生成图并下载 image 与 STL。";
   }
   if (status === "failed") {
     return error ? `任务失败：${error}` : "任务失败。";
@@ -365,8 +381,8 @@ function init() {
   setPolling(false);
   showFileError("");
   setUploadBoxImage("");
-  setFrameImage(sourceFrame, sourceImage, sourcePlaceholder, "", "选择图片后在这里显示。");
-  clearResultPreview("状态为 done 后，这里显示 depth image，并开放下载。");
+  setCompareBaseImage("");
+  clearResultPreview("状态为 done 后，这里显示生成图，并与原图侧边对齐对比。");
 }
 
 init();

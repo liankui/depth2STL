@@ -11,37 +11,57 @@
       <section class="card">
         <div class="section-head">
           <h1>depth2STL</h1>
-          <p>上传图片后自动预览，创建任务后自动填充并轮询 jobId，完成后可对比原图和生成图并下载结果。</p>
+          <p>上传原图后自动创建任务并查询状态，生成图与原图保持同高展示，便于直接比较。</p>
         </div>
 
-        <div class="layout">
-          <div class="panel">
-            <h2>1. 上传图片</h2>
+        <div class="compare-layout">
+          <div class="panel visual-panel">
+            <div class="panel-title-row">
+              <h2>原图</h2>
+              <span id="fileMeta" class="meta">未选择文件</span>
+            </div>
             <form id="uploadForm" class="stack">
               <label id="uploadBox" class="upload-box" for="uploadFile">
                 <input id="uploadFile" type="file" accept="image/png,image/jpeg,image/webp" required />
                 <img id="uploadPreviewImage" class="upload-preview-image" alt="上传框内原图预览" />
                 <div id="uploadEmptyState" class="upload-empty-state">
                   <span id="uploadTitle" class="upload-title">选择图片</span>
-                  <span class="upload-desc">支持 png、jpg、webp，文件大小不超过 10MB</span>
+                  <span class="upload-desc">支持 png、jpg、webp，最大 10MB</span>
                 </div>
               </label>
               <p id="fileError" class="message error hidden"></p>
-              <button type="submit">2. 创建任务</button>
+              <div class="action-row">
+                <button type="submit">创建任务</button>
+                <span id="pollingState" class="meta">未轮询</span>
+              </div>
             </form>
-            <div class="preview-meta">
-              <span id="fileMeta" class="meta">未选择文件</span>
-              <span id="pollingState" class="meta">未轮询</span>
-            </div>
           </div>
 
-          <div class="panel">
-            <h2>3. 查询任务状态</h2>
+          <div class="panel visual-panel">
+            <div class="panel-title-row">
+              <h2>生成图</h2>
+              <div class="row actions">
+                <button id="downloadImageBtn" type="button" class="secondary" disabled>下载 image</button>
+                <button id="downloadStlBtn" type="button" class="secondary" disabled>下载 STL</button>
+              </div>
+            </div>
+            <div id="resultFrame" class="image-frame result-frame">
+              <img id="sourceImage" class="ghost-image" alt="上传图片预览" />
+              <img id="previewImage" class="result-image" alt="生成的 depth image 预览" />
+              <p id="previewHint" class="placeholder">状态为 done 后，这里显示生成图；原图会以浅色背景对齐，方便比对轮廓。</p>
+              <p id="sourcePlaceholder" class="placeholder placeholder-secondary">选择图片后这里会保持与左侧同高展示。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="info-layout">
+          <div class="panel compact-panel">
+            <h2>任务状态</h2>
             <div class="stack">
               <div>
                 <label for="jobIdInput" class="field-label">jobId</label>
                 <div class="row">
-                  <input id="jobIdInput" type="text" placeholder="创建任务后自动填充，也可手动输入" />
+                  <input id="jobIdInput" type="text" placeholder="创建后自动填充，也可手动输入" />
                   <button id="queryJobBtn" type="button" class="secondary">查询</button>
                 </div>
               </div>
@@ -55,35 +75,14 @@
                   <span class="field-label">状态</span>
                   <span id="jobStatusBadge" class="badge badge-idle">idle</span>
                 </div>
-                <p id="statusMessage" class="message">创建任务后会返回 jobId，可继续查询任务状态。</p>
+                <p id="statusMessage" class="message">创建任务后会返回 jobId，并自动开始查询。</p>
               </div>
             </div>
+          </div>
 
-            <div class="result-panel">
-              <div class="result-head">
-                <h2>4. 结果预览与下载</h2>
-                <div class="row actions">
-                  <button id="downloadImageBtn" type="button" class="secondary" disabled>下载 image</button>
-                  <button id="downloadStlBtn" type="button" class="secondary" disabled>下载 STL</button>
-                </div>
-              </div>
-              <div class="compare-grid">
-                <div class="compare-card">
-                  <div class="compare-title">原图</div>
-                  <div id="sourceFrame" class="image-frame compare-frame">
-                    <img id="sourceImage" alt="上传图片预览" />
-                    <p id="sourcePlaceholder" class="placeholder">选择图片后在这里显示。</p>
-                  </div>
-                </div>
-                <div class="compare-card">
-                  <div class="compare-title">生成图</div>
-                  <div id="resultFrame" class="image-frame compare-frame">
-                    <img id="previewImage" alt="生成的 depth image 预览" />
-                    <p id="previewHint" class="placeholder">状态为 done 后，这里显示 depth image，并开放下载。</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+          <div class="panel compact-panel note-panel">
+            <h2>说明</h2>
+            <p class="message">左侧始终显示原图，右侧显示当前生成结果。任务处理中时会自动轮询，完成后直接下载 image 与 STL。</p>
           </div>
         </div>
       </section>
