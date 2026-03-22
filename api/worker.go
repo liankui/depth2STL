@@ -64,7 +64,7 @@ func processJob(job *Job) error {
 
 	// 生成深度图
 	var gray *image.Gray
-	if job.SkipDepth {
+	if job.SkipConv {
 		gray = depth.ConvertToGray(img)
 	} else {
 		gray = depth.GenerateDepthMap4(img, job.Invert)

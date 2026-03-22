@@ -45,12 +45,18 @@ func UploadHandler(c *gin.Context) {
 	}
 
 	job := &Job{
-		ID:        jobID,
-		Name:      filename,
-		FilePath:  inputPath,
-		ImagePath: imgPath,
-		StlPath:   stlPath,
-		Status:    StatusQueued,
+		ID:             jobID,
+		Name:           filename,
+		FilePath:       inputPath,
+		ImagePath:      imgPath,
+		StlPath:        stlPath,
+		ModelWidth:     30,
+		ModelThickness: 2,
+		BaseThickness:  1,
+		SkipConv:       false,
+		Invert:         false,
+		SubSample:      1,
+		Status:         StatusQueued,
 	}
 
 	select {

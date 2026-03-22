@@ -1,6 +1,11 @@
 package main
 
 import (
+	"fmt"
+	"net"
+	"os"
+	"strings"
+
 	"github.com/chaos-io/depth2STL/api"
 	"github.com/gin-gonic/gin"
 	"github.com/robfig/cron/v3"
@@ -22,18 +27,60 @@ func main() {
 		v1.DELETE("/relief/queue/:jobId", api.DeleteJobHandler)           // 删除任务
 	}
 
+	router.GET("/config.js", frontendConfigHandler)
 	router.Static("/frontend", "./frontend")
 	router.StaticFile("/", "./frontend/index.html")
 
 	crontab()
 
-	// By default it serves on :8080 unless a
-	// PORT environment variable was defined.
-	err := router.Run(":31101")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "31101"
+	}
+
+	err := router.Run(":" + port)
 	if err != nil {
 		panic(err)
 	}
 	// router.Run(":3000") for a hard coded port
+}
+
+func frontendConfigHandler(c *gin.Context) {
+	apiBaseURL := os.Getenv("API_BASE_URL")
+	if apiBaseURL == "" {
+		port := os.Getenv("PORT")
+		if port == "" {
+			port = "31101"
+		}
+
+		apiBaseURL = fmt.Sprintf("%s://%s:%s/v1", requestScheme(c), requestHost(c), port)
+	}
+
+	c.Header("Content-Type", "application/javascript; charset=utf-8")
+	c.String(200, "window.APP_CONFIG = { apiBaseUrl: %q };\n", strings.TrimRight(apiBaseURL, "/"))
+}
+
+func requestScheme(c *gin.Context) string {
+	if c.GetHeader("X-Forwarded-Proto") == "https" {
+		return "https"
+	}
+	if c.Request.TLS != nil {
+		return "https"
+	}
+	return "http"
+}
+
+func requestHost(c *gin.Context) string {
+	host := c.Request.Host
+	if host == "" {
+		return "localhost"
+	}
+
+	if name, _, err := net.SplitHostPort(host); err == nil {
+		return name
+	}
+
+	return host
 }
 
 func crontab() {

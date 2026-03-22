@@ -1,4 +1,4 @@
-const API_BASE = "/v1";
+const API_BASE = ((window.APP_CONFIG && window.APP_CONFIG.apiBaseUrl) || "/v1").replace(/\/$/, "");
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const POLL_INTERVAL_MS = 2500;
 const POLLABLE_STATUSES = new Set(["queued", "processing"]);
