@@ -2,17 +2,22 @@
 
 This project provides a server that converts 2D images into 3D relief models in STL format, suitable for 3D printing or rendering.
 
-### 工具参数
+### API 参数
 
-- `image_path`：要转换的图像本地路径或 URL
-- `model_width`：3D 模型的宽度（毫米，默认：50.0）
-- `model_thickness`：3D 模型的最大厚度/高度（毫米，默认：5.0）
-- `base_thickness`：底座厚度（毫米，默认：2.0）
-- `skip_depth`：是否直接使用图像或生成深度图（默认：true）
-- `invert_depth`：是否反转浮雕（明亮区域变低而不是高，默认：false）
-- `detail_level`：控制处理图像的分辨率（默认：1.0）。当 detail_level = 1.0 时，图像以 320px 分辨率处理，生成的 STL 文件通常在 100MB 以内。较高的值可以提高细节质量，但会显著增加处理时间和 STL 文件大小。例如，将 detail_level 值加倍可能会使文件大小增加 4 倍或更多，请谨慎使用。
+`POST /v1/relief` 使用 `multipart/form-data` 上传，当前接口参数如下：
 
-大语言模型可通过提供的 URL 访问生成的文件。
+- `file`：必填，待转换的图片文件
+- `modelWidth`：模型宽度，单位毫米，默认 `50.0`
+- `modelThickness`：模型最大厚度，单位毫米，默认 `5.0`
+- `baseThickness`：底座厚度，单位毫米，默认 `2.0`
+- `skipConv`：是否跳过深度图转换，默认 `false`
+- `invert`：是否反转浮雕方向，默认 `false`
+- `detailLevel`：细节等级，默认 `1`
+
+其中 `detailLevel` 为整数等级：
+- `1`：普通精度
+- `2`：推荐精度，质量和处理开销明显增加
+- `3`：高精度，生成更慢且文件更大
 
 ## 服务启动
 
