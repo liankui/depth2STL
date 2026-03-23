@@ -4,9 +4,15 @@
 
 ## 使用
 
-1. 启动后端服务，默认监听 `31101`。
-2. 直接打开 `http://localhost:31101/`（或 `http://localhost:31101/frontend/`）。
+1. 在项目根目录启动后端服务，默认监听 `31101`：
+
+   ```bash
+   go run .
+   ```
+2. 直接打开 `http://localhost:31101/` （或 `http://localhost:31101/frontend/` ）。
 3. 前端会先读取 `/config.js`，再决定 API 地址。
+
+当前实现中，前端首页挂载在 `/`，静态资源目录挂载在 `/frontend`。
 
 ## 配置
 
@@ -20,7 +26,7 @@
 示例：
 
 ```bash
-PORT=32000 API_BASE_URL=http://localhost:32000/v1 go run ./cmd
+PORT=32000 API_BASE_URL=http://localhost:32000/v1 go run .
 ```
 
 ## 支持接口

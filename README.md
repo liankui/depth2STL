@@ -16,9 +16,21 @@ This project provides a server that converts 2D images into 3D relief models in 
 
 大语言模型可通过提供的 URL 访问生成的文件。
 
+## 服务启动
+
+项目入口文件现在位于仓库根目录的 `main.go`，启动服务时请直接在项目根目录执行：
+
+```bash
+go run .
+```
+
+默认监听端口为 `31101`，启动后可访问：
+
+- `http://localhost:31101/` 前端调试页面
+
 ### 命令行
 
-您也可以直接从命令行使用脚本：
+您也可以直接从命令行处理单张图片：
 
 ```bash
 go run . --imagePath=input/Dota_2_Monster_Hunter_codex_centaur_warrunner_gameasset.png
