@@ -2,8 +2,6 @@
 
 This project provides a server that converts 2D images into 3D relief models in STL format, suitable for 3D printing or rendering.
 
-## ref to https://github.com/Bigchx/mcp_3d_relief
-
 ### 工具参数
 
 - `image_path`：要转换的图像本地路径或 URL
@@ -28,14 +26,6 @@ go run .
 
 - `http://localhost:31101/` 前端调试页面
 
-### 命令行
-
-您也可以直接从命令行处理单张图片：
-
-```bash
-go run . --imagePath=input/Dota_2_Monster_Hunter_codex_centaur_warrunner_gameasset.png
-```
-
 ### 外部深度图生成
 
 为获得更高质量的深度图，您可以使用外部深度图生成服务，如 [Depth-Anything-V2](https://huggingface.co/spaces/depth-anything/Depth-Anything-V2)。该服务可以生成更准确的深度图，然后您可以将其用于本项目：
@@ -43,7 +33,7 @@ go run . --imagePath=input/Dota_2_Monster_Hunter_codex_centaur_warrunner_gameass
 1. 访问 [https://huggingface.co/spaces/depth-anything/Depth-Anything-V2](https://huggingface.co/spaces/depth-anything/Depth-Anything-V2)
 2. 上传您的图像以生成深度图
 3. 下载生成的深度图
-4. 将此深度图与我们的转换器一起使用，设置 `--skipDepth=false`
+4. 将此深度图与我们的转换器一起使用，设置 `--skipConv=false`
 
 这种方法可以提供更好的 3D 浮雕模型，特别是对于复杂图像。
 
