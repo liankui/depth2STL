@@ -154,7 +154,7 @@ func (b *BiRefNetRemBG) prompt(ctx context.Context) error {
 	}
 
 	// 5. 打印调试
-	fmt.Printf("get the prompt request body: %s\n", string(body))
+	// fmt.Printf("get the prompt request body: %s\n", string(body))
 
 	reqParam := &nhttp.RequestParam{
 		RequestURI: promptUrl,
