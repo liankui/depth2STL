@@ -1,130 +1,100 @@
 package main
 
 import (
-	"flag"
-	"image"
-	"image/png"
-	"log/slog"
+	"fmt"
+	"net"
 	"os"
-	"path/filepath"
 	"strings"
 
-	"github.com/chaos-io/depth2STL/depth"
-	"github.com/chaos-io/depth2STL/depth/rembg"
-	"github.com/chaos-io/depth2STL/stl"
-	"github.com/chaos-io/depth2STL/util"
-	"github.com/segmentio/ksuid"
-)
-
-/*
-  - `image_path`：要转换的图像本地路径或 URL
-  - `model_width`：3D 模型的宽度（毫米，默认：50.0）
-  - `model_thickness`：3D 模型的最大厚度/高度（毫米，默认：5.0）
-  - `base_thickness`：底座厚度（毫米，默认：2.0）
-  - `skip_depth`：是否直接使用图像或生成深度图（默认：true）
-  - `invert_depth`：是否反转浮雕（明亮区域变低而不是高，默认：false）
-  - `detail_level`：控制处理图像的分辨率（默认：1.0）。当 detail_level = 1.0 时，图像以 320px 分辨率处理，生成的 STL 文件通常在 100MB 以内。
-    较高的值可以提高细节质量，但会显著增加处理时间和 STL 文件大小。例如，将 detail_level 值加倍可能会使文件大小增加 4 倍或更多，请谨慎使用。
-*/
-var (
-	imagePath       = flag.String("imagePath", "", "local path or web URL to the input image file")
-	modelWidth      = flag.Float64("modelWidth", 50.0, "width of the 3D model in mm (default: 50.0)")
-	modelThickness  = flag.Float64("modelThickness", 5.0, "maximum thickness/height of the 3D model in mm (default: 5.0)")
-	baseThickness   = flag.Float64("baseThickness", 2.0, "tickness of the base in mm (default: 2.0)")
-	skipDepth       = flag.Bool("skipDepth", true, "whether to use the image directly or generate a depth map (default: true)")
-	preProcessModel = flag.String("preProcessModel", "", "whether to use the rembg model pre process (default: )")
-	invertDepth     = flag.Bool("invertDepth", false, "invert the relief (bright areas become low instead of high) (default: false)")
-	detailLevel     = flag.Float64("detailLevel", 1.0, "level of detail level (default: 1.0)")
+	"github.com/chaos-io/depth2STL/api"
+	"github.com/gin-gonic/gin"
+	"github.com/robfig/cron/v3"
 )
 
 func main() {
-	flag.Parse()
+	// Creates a gin router with default middleware:
+	// logger and recovery (crash-free) middleware
+	router := gin.Default()
+	router.MaxMultipartMemory = 10 << 20 // 10 MiB
 
-	d := &Depth{
-		ImagePath:       *imagePath,
-		ModelWidth:      *modelWidth,
-		ModelThickness:  *modelThickness,
-		BaseThickness:   *baseThickness,
-		SkipDepth:       *skipDepth,
-		PreProcessModel: *preProcessModel,
-		InvertDepth:     *invertDepth,
-		DetailLevel:     *detailLevel,
+	{
+		v1 := router.Group("/v1")
+		v1.POST("/relief", api.CreateHandler)                             // 创建任务
+		v1.GET("/relief/download/image/:jobId", api.DownloadImageHandler) // 下载image
+		v1.GET("/relief/download/stl/:jobId", api.DownloadStlHandler)     // 下载STL
+		v1.GET("/relief/:jobId", api.GetJobHandler)                       // 查询任务
+		v1.GET("/relief/queue/status", api.QueueStatusHandler)            // 队列状态
+		v1.DELETE("/relief/queue/:jobId", api.DeleteJobHandler)           // 删除任务
 	}
 
-	err := Execute(d)
+	router.GET("/config.js", frontendConfigHandler)
+	router.Static("/frontend", "./frontend")
+	router.StaticFile("/", "./frontend/index.html")
+
+	crontab()
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "31101"
+	}
+
+	err := router.Run(":" + port)
 	if err != nil {
-		slog.Error("failed to execute depth2STL", "error", err)
+		panic(err)
 	}
+	// router.Run(":3000") for a hard coded port
 }
 
-type Depth struct {
-	ImagePath       string
-	ModelWidth      float64
-	ModelThickness  float64
-	BaseThickness   float64
-	SkipDepth       bool
-	PreProcessModel string
-	InvertDepth     bool
-	DetailLevel     float64
-}
-
-func Execute(d *Depth) error {
-	inputPath := d.ImagePath
-	outputDir := "./output"
-	_ = os.MkdirAll(outputDir, os.ModePerm)
-
-	var img image.Image
-	var err error
-	if strings.HasPrefix(inputPath, "http://") || strings.HasPrefix(inputPath, "https://") {
-		img, err = util.DownloadImage(inputPath)
-	} else {
-		img, err = util.OpenImage(inputPath)
-	}
-	if err != nil {
-		slog.Error("failed to load image", "error", err)
-		return err
-	}
-
-	if d.PreProcessModel == rembg.BiRefNetModel {
-		p := &depth.Preprocessor{RemBG: rembg.NewBiRefNetRemBG(inputPath)}
-		img, err = p.ImagePreprocess(img)
-		if err != nil {
-			slog.Error("failed to preprocess image", "error", err)
-			return err
+func frontendConfigHandler(c *gin.Context) {
+	apiBaseURL := os.Getenv("API_BASE_URL")
+	if apiBaseURL == "" {
+		port := os.Getenv("PORT")
+		if port == "" {
+			port = "31101"
 		}
+
+		apiBaseURL = fmt.Sprintf("%s://%s:%s/v1", requestScheme(c), requestHost(c), port)
 	}
 
-	var depthMap *image.Gray
-	if d.SkipDepth { // 直接使用灰度图
-		depthMap = depth.ConvertToGray(img)
-	} else { // 调用统一的深度图生成函数
-		depthMap = depth.GenerateDepthMap2(img, d.DetailLevel, d.InvertDepth)
+	c.Header("Content-Type", "application/javascript; charset=utf-8")
+	c.String(200, "window.APP_CONFIG = { apiBaseUrl: %q };\n", strings.TrimRight(apiBaseURL, "/"))
+}
+
+func requestScheme(c *gin.Context) string {
+	if c.GetHeader("X-Forwarded-Proto") == "https" {
+		return "https"
+	}
+	if c.Request.TLS != nil {
+		return "https"
+	}
+	return "http"
+}
+
+func requestHost(c *gin.Context) string {
+	host := c.Request.Host
+	if host == "" {
+		return "localhost"
 	}
 
-	imgId := ksuid.New().String()
-	depthPath := filepath.Join(outputDir, imgId+"_depth_map.png")
-	depthFile, err := os.Create(depthPath)
+	if name, _, err := net.SplitHostPort(host); err == nil {
+		return name
+	}
+
+	return host
+}
+
+func crontab() {
+	// 创建 cron 实例（支持秒级）
+	c := cron.New(cron.WithSeconds())
+
+	// 每一小时执行
+	_, err := c.AddFunc("@hourly", func() {
+		// _, err := c.AddFunc("* */5 * * * *", func() { // debug
+		api.ClearJobs()
+	})
 	if err != nil {
-		slog.Error("failed to open depth_map.png", "error", err)
-		return err
-	}
-	defer func() {
-		_ = depthFile.Close()
-	}()
-
-	err = png.Encode(depthFile, depthMap)
-	if err != nil {
-		slog.Error("failed to encode depth map", "error", err)
-		return err
+		panic(err)
 	}
 
-	stlPath := filepath.Join(outputDir, imgId+".stl")
-	err = stl.GenerateSTL2(depthMap, stlPath, d.ModelWidth, d.ModelThickness, d.BaseThickness)
-	if err != nil {
-		slog.Error("failed to generate stl", "error", err)
-		return err
-	}
-
-	slog.Info("generated stl", "stl path", stlPath, "depth path", depthPath)
-	return nil
+	c.Start()
 }

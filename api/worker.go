@@ -7,11 +7,13 @@ import (
 	_ "image/jpeg"
 	"image/png"
 	_ "image/png"
+	"log/slog"
 	"os"
 	"sync/atomic"
 	"time"
 
 	"github.com/chaos-io/depth2STL/depth"
+	"github.com/chaos-io/depth2STL/depth/rembg"
 	"github.com/chaos-io/depth2STL/stl"
 )
 
@@ -60,6 +62,16 @@ func processJob(job *Job) error {
 	img, _, err := image.Decode(f)
 	if err != nil {
 		return err
+	}
+
+	if job.PreProcess == rembg.BiRefNetModel {
+		// TODO: 多次读取file
+		p := &depth.Preprocessor{RemBG: rembg.NewBiRefNetRemBG(job.FilePath)}
+		img, err = p.ImagePreprocess(img)
+		if err != nil {
+			slog.Error("failed to preprocess image", "error", err)
+			return err
+		}
 	}
 
 	// 生成深度图
