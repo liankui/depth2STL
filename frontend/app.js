@@ -522,11 +522,6 @@ function init() {
     "",
   );
   clearResultPreview("完成后显示生成图。");
-  if (SAMPLE_IMAGES.length > 0) {
-    applySampleImage(SAMPLE_IMAGES[0]).catch(() => {
-      statusMessage.textContent = "示例图加载失败，请手动上传图片。";
-    });
-  }
 }
 
 init();
