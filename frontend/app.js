@@ -2,6 +2,15 @@ const API_BASE = ((window.APP_CONFIG && window.APP_CONFIG.apiBaseUrl) || "/v1").
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const POLL_INTERVAL_MS = 2500;
 const POLLABLE_STATUSES = new Set(["queued", "processing"]);
+const SAMPLE_BASE_PATH = "/frontend/images/default";
+const SAMPLE_IMAGES = [
+  "Dota_2_Monster_Hunter_codex_abaddon_gameasset.png",
+  "Dota_2_Monster_Hunter_codex_alchemist_gameasset.png",
+  "Dota_2_Monster_Hunter_codex_crystal_maiden_gameasset.png",
+  "Dota_2_Monster_Hunter_codex_huskar_gameasset.png",
+  "Dota_2_Monster_Hunter_codex_pangolier_gameasset.png",
+  "Dota_2_Monster_Hunter_codex_undying_gameasset.png",
+];
 
 const uploadForm = document.getElementById("uploadForm");
 const uploadFileInput = document.getElementById("uploadFile");
@@ -25,11 +34,14 @@ const previewImage = document.getElementById("previewImage");
 const previewHint = document.getElementById("previewHint");
 const downloadImageBtn = document.getElementById("downloadImageBtn");
 const downloadStlBtn = document.getElementById("downloadStlBtn");
+const sampleGalleryGrid = document.getElementById("sampleGalleryGrid");
 
 let currentJobId = "";
 let sourceObjectUrl = "";
 let resultObjectUrl = "";
 let jobPollTimer = null;
+let currentSampleName = "";
+let selectedSourceFile = null;
 
 function formatSize(size) {
   if (size < 1024 * 1024) {
@@ -74,6 +86,24 @@ function setCurrentJobId(jobId) {
   jobIdInput.value = currentJobId;
 }
 
+function formatSampleName(fileName) {
+  return fileName
+    .replace(/^Dota_2_Monster_Hunter_codex_/, "")
+    .replace(/_gameasset\.png$/, "")
+    .replace(/_/g, " ");
+}
+
+function setActiveSample(sampleName) {
+  currentSampleName = sampleName || "";
+  if (!sampleGalleryGrid) {
+    return;
+  }
+  sampleGalleryGrid.querySelectorAll(".sample-item").forEach((item) => {
+    const isActive = item.dataset.sampleName === currentSampleName;
+    item.classList.toggle("active", isActive);
+  });
+}
+
 function showFileError(message) {
   if (!message) {
     fileError.textContent = "";
@@ -107,6 +137,11 @@ function validateFile(file) {
     return "图片大小不能超过 10MB";
   }
   return "";
+}
+
+function getCurrentSourceFile() {
+  const inputFile = uploadFileInput.files && uploadFileInput.files[0] ? uploadFileInput.files[0] : null;
+  return inputFile || selectedSourceFile;
 }
 
 function parsePositiveNumber(input, label, minValue, allowZero = false) {
@@ -152,7 +187,11 @@ function getCreateOptions() {
 }
 
 function updateSelectedFile() {
-  const file = uploadFileInput.files && uploadFileInput.files[0] ? uploadFileInput.files[0] : null;
+  const inputFile = uploadFileInput.files && uploadFileInput.files[0] ? uploadFileInput.files[0] : null;
+  if (inputFile) {
+    selectedSourceFile = inputFile;
+  }
+  const file = getCurrentSourceFile();
 
   if (sourceObjectUrl) {
     URL.revokeObjectURL(sourceObjectUrl);
@@ -331,12 +370,81 @@ async function downloadFile(jobId, kind) {
   URL.revokeObjectURL(objectUrl);
 }
 
-uploadFileInput.addEventListener("change", updateSelectedFile);
+async function applySampleImage(sampleName) {
+  const samplePath = `${SAMPLE_BASE_PATH}/${sampleName}`;
+  let response;
+  try {
+    response = await fetch(samplePath);
+  } catch {
+    throw new Error("示例图片读取失败");
+  }
+
+  if (!response.ok) {
+    throw new Error("示例图片不存在");
+  }
+
+  const blob = await response.blob();
+  const file = new File([blob], sampleName, { type: blob.type || "image/png" });
+  selectedSourceFile = file;
+  uploadFileInput.value = "";
+  updateSelectedFile();
+  setActiveSample(sampleName);
+  statusMessage.textContent = `已选择示例图：${formatSampleName(sampleName)}`;
+}
+
+function renderSampleGallery() {
+  if (!sampleGalleryGrid) {
+    return;
+  }
+
+  sampleGalleryGrid.innerHTML = "";
+  const fragment = document.createDocumentFragment();
+
+  SAMPLE_IMAGES.forEach((sampleName) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "sample-item";
+    item.dataset.sampleName = sampleName;
+    item.setAttribute("aria-label", `使用示例图 ${formatSampleName(sampleName)}`);
+
+    const img = document.createElement("img");
+    img.src = `${SAMPLE_BASE_PATH}/${sampleName}`;
+    img.alt = formatSampleName(sampleName);
+    img.loading = "lazy";
+
+    item.appendChild(img);
+    item.addEventListener("click", async () => {
+      try {
+        await applySampleImage(sampleName);
+      } catch (error) {
+        showFileError(error.message);
+      }
+    });
+
+    fragment.appendChild(item);
+  });
+
+  sampleGalleryGrid.appendChild(fragment);
+}
+
+uploadFileInput.addEventListener("change", () => {
+  setActiveSample("");
+  updateSelectedFile();
+});
 
 uploadForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
-  const file = uploadFileInput.files && uploadFileInput.files[0] ? uploadFileInput.files[0] : null;
+  let file = getCurrentSourceFile();
+  if (!file && SAMPLE_IMAGES.length > 0) {
+    try {
+      await applySampleImage(SAMPLE_IMAGES[0]);
+      file = getCurrentSourceFile();
+    } catch {
+      // keep original validation flow
+    }
+  }
+
   const error = validateFile(file);
   if (error) {
     showFileError(error);
@@ -404,6 +512,8 @@ function init() {
   setStatus("idle");
   createJobBtn.classList.remove("is-downloaded");
   showFileError("");
+  selectedSourceFile = null;
+  renderSampleGallery();
   setFrameImage(
     sourceFrame,
     sourceImage,
@@ -412,6 +522,11 @@ function init() {
     "",
   );
   clearResultPreview("完成后显示生成图。");
+  if (SAMPLE_IMAGES.length > 0) {
+    applySampleImage(SAMPLE_IMAGES[0]).catch(() => {
+      statusMessage.textContent = "示例图加载失败，请手动上传图片。";
+    });
+  }
 }
 
 init();

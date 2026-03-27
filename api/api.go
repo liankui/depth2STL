@@ -96,9 +96,11 @@ func CreateHandler(c *gin.Context) {
 
 	file, err := c.FormFile("file")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := validateFileType(file.Filename); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -109,9 +111,9 @@ func CreateHandler(c *gin.Context) {
 	tmpDir := filepath.Join(pwd, "tmp", jobID)
 	_ = os.MkdirAll(tmpDir, os.ModePerm)
 
-	inputPath := filepath.Join(tmpDir, file.Filename)
-	imgPath := filepath.Join(tmpDir, jobID+ext)
-	stlPath := filepath.Join(tmpDir, jobID+".stl")
+	inputPath := filepath.Clean(filepath.Join(tmpDir, file.Filename))
+	imgPath := filepath.Clean(filepath.Join(tmpDir, jobID+ext))
+	stlPath := filepath.Clean(filepath.Join(tmpDir, jobID+".stl"))
 
 	err = c.SaveUploadedFile(file, inputPath)
 	if err != nil {
@@ -147,6 +149,20 @@ func CreateHandler(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{"jobId": jobID})
+}
+
+func validateFileType(filename string) error {
+	ext := filepath.Ext(filename)
+	allowedExtensions := map[string]bool{
+		".jpg":  true,
+		".jpeg": true,
+		".png":  true,
+	}
+
+	if !allowedExtensions[strings.ToLower(ext)] {
+		return fmt.Errorf("unsupported file type: %s", ext)
+	}
+	return nil
 }
 
 func DownloadStlHandler(c *gin.Context) {
