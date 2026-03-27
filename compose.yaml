@@ -1,0 +1,15 @@
+networks:
+  depth2STL-network:
+    driver: bridge
+
+services:
+  depth2STL-server:
+    image: ${IMAGE_PREFIX}depth2stl-server:v1.0.0
+    restart: always
+    ports:
+      - "31101:31101"
+    networks:
+      - depth2STL-network
+    volumes:
+      - ${SERVER_INSTALL_PATH}/depth2STL/tmp:/tmp
+    container_name: depth2STL-server
