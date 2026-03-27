@@ -48,7 +48,7 @@ func genSTL(name string) error {
 	stlPath := filepath.Join(stlDir, filepath.Base(name))
 	stlPath = strings.Replace(stlPath, ".png", ".stl", 1)
 	// err = GenerateSTL4(got, stlPath, modelWidth, modelThickness, baseThickness)
-	err = GenerateSTL5(got, stlPath, modelWidth, modelThickness, baseThickness, 3)
+	err = GenerateSTL5(got, stlPath, modelWidth, modelThickness, baseThickness, 1)
 	if err != nil {
 		return fmt.Errorf("faild to generate STL, %v", err)
 	}

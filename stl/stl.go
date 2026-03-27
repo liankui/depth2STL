@@ -10,7 +10,22 @@ import (
 	"os"
 )
 
-const defaultMaxTriangles = 1_000_000
+const (
+	maxTrianglesL1 = 250_000
+	maxTrianglesL2 = 600_000
+	maxTrianglesL3 = 1_000_000
+)
+
+func triangleBudgetByDetailLevel(detailLevel int) int {
+	switch {
+	case detailLevel <= 1:
+		return maxTrianglesL1
+	case detailLevel == 2:
+		return maxTrianglesL2
+	default:
+		return maxTrianglesL3
+	}
+}
 
 func gridSizeByStep(length int, step float64) int {
 	if length < 2 {
@@ -78,6 +93,254 @@ func findStepForTriangleBudget(w, h int, preferredStep float64, budget int) floa
 		}
 	}
 	return high
+}
+
+func buildAxisSamples(length int, step float64) []float64 {
+	if length < 2 {
+		return nil
+	}
+	size := gridSizeByStep(length, step)
+	samples := make([]float64, size)
+	maxV := float64(length - 1)
+	for i := 0; i < size; i++ {
+		v := float64(i) * step
+		if v > maxV {
+			v = maxV
+		}
+		samples[i] = v
+	}
+	return samples
+}
+
+func buildHeightField(depthMap *image.Gray, xSamples, ySamples []float64, modelThickness float64) []float64 {
+	w, h := len(xSamples), len(ySamples)
+	height := make([]float64, w*h)
+	imgW := depthMap.Bounds().Dx()
+	imgH := depthMap.Bounds().Dy()
+
+	get := func(x, y int) float64 {
+		return float64(depthMap.Pix[y*depthMap.Stride+x]) / 255.0
+	}
+
+	for gy, y := range ySamples {
+		y0 := int(math.Floor(y))
+		y1 := min(y0+1, imgH-1)
+		fy := y - float64(y0)
+		for gx, x := range xSamples {
+			x0 := int(math.Floor(x))
+			x1 := min(x0+1, imgW-1)
+			fx := x - float64(x0)
+
+			z00 := get(x0, y0)
+			z10 := get(x1, y0)
+			z01 := get(x0, y1)
+			z11 := get(x1, y1)
+
+			z0 := z00*(1-fx) + z10*fx
+			z1 := z01*(1-fx) + z11*fx
+			z := z0*(1-fy) + z1*fy
+			z = math.Pow(z, 0.7)
+			height[gy*w+gx] = z * modelThickness
+		}
+	}
+
+	return height
+}
+
+func buildModelCoordinates(xSamples, ySamples []float64, pixel float64, h int) ([]float32, []float32) {
+	pixel32 := float32(pixel)
+	xModel := make([]float32, len(xSamples))
+	for i, xs := range xSamples {
+		xModel[i] = float32(xs) * pixel32
+	}
+
+	yModel := make([]float32, len(ySamples))
+	for i, ys := range ySamples {
+		yModel[i] = float32(float64(h)-ys-1) * pixel32
+	}
+
+	return xModel, yModel
+}
+
+type binarySTLWriter struct {
+	w      *bufio.Writer
+	record [50]byte
+}
+
+func newBinarySTLWriter(w *bufio.Writer) *binarySTLWriter {
+	return &binarySTLWriter{w: w}
+}
+
+func (bw *binarySTLWriter) writeHeader(totalFaces int) error {
+	header := make([]byte, 80)
+	copy(header, []byte("Relief STL Binary (GenerateSTL5)"))
+	if _, err := bw.w.Write(header); err != nil {
+		return err
+	}
+	return binary.Write(bw.w, binary.LittleEndian, uint32(totalFaces))
+}
+
+func (bw *binarySTLWriter) writeTri(v1, v2, v3 [3]float32) error {
+	nx, ny, nz := calcNormal(v1, v2, v3)
+	off := 0
+	putF32 := func(v float32) {
+		binary.LittleEndian.PutUint32(bw.record[off:off+4], math.Float32bits(v))
+		off += 4
+	}
+	putF32(nx)
+	putF32(ny)
+	putF32(nz)
+	putF32(v1[0])
+	putF32(v1[1])
+	putF32(v1[2])
+	putF32(v2[0])
+	putF32(v2[1])
+	putF32(v2[2])
+	putF32(v3[0])
+	putF32(v3[1])
+	putF32(v3[2])
+	binary.LittleEndian.PutUint16(bw.record[48:50], 0)
+	_, err := bw.w.Write(bw.record[:])
+	return err
+}
+
+type point2 struct {
+	x float32
+	y float32
+}
+
+func buildBottomBoundary(xModel, yModel []float32) []point2 {
+	gridW, gridH := len(xModel), len(yModel)
+	boundary := make([]point2, 0, max(0, 2*(gridW+gridH)-4))
+
+	for x := 0; x < gridW; x++ {
+		boundary = append(boundary, point2{x: xModel[x], y: yModel[0]})
+	}
+	for y := 1; y < gridH; y++ {
+		boundary = append(boundary, point2{x: xModel[gridW-1], y: yModel[y]})
+	}
+	for x := gridW - 2; x >= 0; x-- {
+		boundary = append(boundary, point2{x: xModel[x], y: yModel[gridH-1]})
+	}
+	for y := gridH - 2; y > 0; y-- {
+		boundary = append(boundary, point2{x: xModel[0], y: yModel[y]})
+	}
+
+	return boundary
+}
+
+func writeTopSurface(w *binarySTLWriter, xModel, yModel []float32, height []float64, gridW, gridH int) error {
+	for y := 0; y < gridH-1; y++ {
+		row := y * gridW
+		nextRow := (y + 1) * gridW
+		y0 := yModel[y]
+		y1 := yModel[y+1]
+		for x := 0; x < gridW-1; x++ {
+			x0 := xModel[x]
+			x1 := xModel[x+1]
+			z00 := float32(height[row+x])
+			z10 := float32(height[row+x+1])
+			z01 := float32(height[nextRow+x])
+			z11 := float32(height[nextRow+x+1])
+
+			if err := w.writeTri(
+				[3]float32{x0, y0, z00},
+				[3]float32{x1, y0, z10},
+				[3]float32{x0, y1, z01},
+			); err != nil {
+				return err
+			}
+			if err := w.writeTri(
+				[3]float32{x1, y0, z10},
+				[3]float32{x1, y1, z11},
+				[3]float32{x0, y1, z01},
+			); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func writeBottomSurfaceFan(w *binarySTLWriter, xModel, yModel []float32, zBase32 float32) error {
+	boundary := buildBottomBoundary(xModel, yModel)
+	center := [3]float32{
+		(xModel[0] + xModel[len(xModel)-1]) * 0.5,
+		(yModel[0] + yModel[len(yModel)-1]) * 0.5,
+		zBase32,
+	}
+	for i := 0; i < len(boundary); i++ {
+		j := (i + 1) % len(boundary)
+		v1 := [3]float32{boundary[i].x, boundary[i].y, zBase32}
+		v2 := [3]float32{boundary[j].x, boundary[j].y, zBase32}
+		if err := w.writeTri(center, v2, v1); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeSideWalls(w *binarySTLWriter, xModel, yModel []float32, height []float64, gridW, gridH int, zBase32 float32) error {
+	for x := 0; x < gridW-1; x++ {
+		x0 := xModel[x]
+		x1 := xModel[x+1]
+		z1 := float32(height[(gridH-1)*gridW+x])
+		z2 := float32(height[(gridH-1)*gridW+x+1])
+		y := yModel[gridH-1]
+
+		if err := w.writeTri([3]float32{x0, y, zBase32}, [3]float32{x1, y, zBase32}, [3]float32{x0, y, z1}); err != nil {
+			return err
+		}
+		if err := w.writeTri([3]float32{x1, y, zBase32}, [3]float32{x1, y, z2}, [3]float32{x0, y, z1}); err != nil {
+			return err
+		}
+	}
+
+	yMax := yModel[0]
+	for x := 0; x < gridW-1; x++ {
+		x0 := xModel[x]
+		x1 := xModel[x+1]
+		z1 := float32(height[x])
+		z2 := float32(height[x+1])
+
+		if err := w.writeTri([3]float32{x0, yMax, zBase32}, [3]float32{x0, yMax, z1}, [3]float32{x1, yMax, zBase32}); err != nil {
+			return err
+		}
+		if err := w.writeTri([3]float32{x1, yMax, zBase32}, [3]float32{x0, yMax, z1}, [3]float32{x1, yMax, z2}); err != nil {
+			return err
+		}
+	}
+
+	for y := 0; y < gridH-1; y++ {
+		y0 := yModel[y]
+		y1 := yModel[y+1]
+		z1 := float32(height[y*gridW])
+		z2 := float32(height[(y+1)*gridW])
+
+		if err := w.writeTri([3]float32{0, y0, zBase32}, [3]float32{0, y0, z1}, [3]float32{0, y1, zBase32}); err != nil {
+			return err
+		}
+		if err := w.writeTri([3]float32{0, y1, zBase32}, [3]float32{0, y0, z1}, [3]float32{0, y1, z2}); err != nil {
+			return err
+		}
+	}
+
+	xMax := xModel[gridW-1]
+	for y := 0; y < gridH-1; y++ {
+		y0 := yModel[y]
+		y1 := yModel[y+1]
+		z1 := float32(height[y*gridW+(gridW-1)])
+		z2 := float32(height[(y+1)*gridW+(gridW-1)])
+
+		if err := w.writeTri([3]float32{xMax, y0, zBase32}, [3]float32{xMax, y1, zBase32}, [3]float32{xMax, y0, z1}); err != nil {
+			return err
+		}
+		if err := w.writeTri([3]float32{xMax, y1, zBase32}, [3]float32{xMax, y1, z2}, [3]float32{xMax, y0, z1}); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func GenerateSTL(depthMap *image.Gray, outputPath string, modelWidth, modelThickness, baseThickness float64) error {
@@ -488,302 +751,43 @@ func GenerateSTL5(depthMap *image.Gray, outputPath string, modelWidth, modelThic
 	}
 
 	preferredStep := 1.0 / float64(detailLevel)
-	step := findStepForTriangleBudget(w, h, preferredStep, defaultMaxTriangles)
-
-	gridW := gridSizeByStep(w, step)
-	gridH := gridSizeByStep(h, step)
-
+	maxTriangles := triangleBudgetByDetailLevel(detailLevel)
+	step := findStepForTriangleBudget(w, h, preferredStep, maxTriangles)
 	pixel := modelWidth / float64(w)
+	xSamples := buildAxisSamples(w, step)
+	ySamples := buildAxisSamples(h, step)
+	gridW, gridH := len(xSamples), len(ySamples)
+	height := buildHeightField(depthMap, xSamples, ySamples, modelThickness)
 
-	// =========================================================
-	// 1️⃣ 高度场（双线性插值 + gamma）
-	// =========================================================
-	xSamples := make([]float64, gridW)
-	for gx := 0; gx < gridW; gx++ {
-		x := float64(gx) * step
-		if x > float64(w-1) {
-			x = float64(w - 1)
-		}
-		xSamples[gx] = x
-	}
-	ySamples := make([]float64, gridH)
-	for gy := 0; gy < gridH; gy++ {
-		y := float64(gy) * step
-		if y > float64(h-1) {
-			y = float64(h - 1)
-		}
-		ySamples[gy] = y
-	}
-
-	height := make([]float64, gridW*gridH)
-
-	get := func(x, y int) float64 {
-		return float64(depthMap.Pix[y*depthMap.Stride+x]) / 255.0
-	}
-
-	for gy := 0; gy < gridH; gy++ {
-		for gx := 0; gx < gridW; gx++ {
-			x := xSamples[gx]
-			y := ySamples[gy]
-
-			x0 := int(math.Floor(x))
-			y0 := int(math.Floor(y))
-			x1 := min(x0+1, w-1)
-			y1 := min(y0+1, h-1)
-
-			fx := x - float64(x0)
-			fy := y - float64(y0)
-
-			z00 := get(x0, y0)
-			z10 := get(x1, y0)
-			z01 := get(x0, y1)
-			z11 := get(x1, y1)
-
-			z0 := z00*(1-fx) + z10*fx
-			z1 := z01*(1-fx) + z11*fx
-			z := z0*(1-fy) + z1*fy
-
-			// 非线性增强（关键）
-			z = math.Pow(z, 0.7)
-
-			height[gy*gridW+gx] = z * modelThickness
-		}
-	}
-
-	zBase := -baseThickness
-
-	// =========================================================
-	// 2️⃣ 面数（必须精确）
-	// =========================================================
 	totalFaces := faceCountByStep(w, h, step)
 	if totalFaces <= 0 {
 		return fmt.Errorf("invalid face count")
 	}
 
-	// =========================================================
-	// 3️⃣ 写 Binary STL
-	// =========================================================
 	f, err := os.Create(outputPath)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	bw := bufio.NewWriterSize(f, 1<<20)
-	defer bw.Flush()
-
-	header := make([]byte, 80)
-	copy(header, []byte("Relief STL Binary (GenerateSTL5)"))
-	bw.Write(header)
-
-	if err := binary.Write(bw, binary.LittleEndian, uint32(totalFaces)); err != nil {
+	buffered := bufio.NewWriterSize(f, 1<<20)
+	defer buffered.Flush()
+	stlWriter := newBinarySTLWriter(buffered)
+	if err := stlWriter.writeHeader(totalFaces); err != nil {
 		return err
 	}
 
-	// Binary STL each triangle record is 50 bytes:
-	// 12 bytes normal + 36 bytes vertices + 2 bytes attr.
-	var triBuf [50]byte
-	writeTri := func(v1, v2, v3 [3]float32) error {
-		nx, ny, nz := calcNormal(v1, v2, v3)
-		off := 0
-		putF32 := func(v float32) {
-			binary.LittleEndian.PutUint32(triBuf[off:off+4], math.Float32bits(v))
-			off += 4
-		}
-		putF32(nx)
-		putF32(ny)
-		putF32(nz)
-		putF32(v1[0])
-		putF32(v1[1])
-		putF32(v1[2])
-		putF32(v2[0])
-		putF32(v2[1])
-		putF32(v2[2])
-		putF32(v3[0])
-		putF32(v3[1])
-		putF32(v3[2])
-		binary.LittleEndian.PutUint16(triBuf[48:50], 0)
-		_, err := bw.Write(triBuf[:])
+	xModel, yModel := buildModelCoordinates(xSamples, ySamples, pixel, h)
+	zBase32 := float32(-baseThickness)
+
+	if err := writeTopSurface(stlWriter, xModel, yModel, height, gridW, gridH); err != nil {
 		return err
 	}
-
-	pixel32 := float32(pixel)
-	zBase32 := float32(zBase)
-	xModel := make([]float32, gridW)
-	for i, xs := range xSamples {
-		xModel[i] = float32(xs) * pixel32
+	if err := writeBottomSurfaceFan(stlWriter, xModel, yModel, zBase32); err != nil {
+		return err
 	}
-	yModel := make([]float32, gridH)
-	for i, ys := range ySamples {
-		yModel[i] = float32(float64(h)-ys-1) * pixel32
-	}
-
-	// =========================================================
-	// 4️⃣ 顶面
-	// =========================================================
-	for y := 0; y < gridH-1; y++ {
-		row := y * gridW
-		nextRow := (y + 1) * gridW
-		y0 := yModel[y]
-		y1 := yModel[y+1]
-		for x := 0; x < gridW-1; x++ {
-			x0 := xModel[x]
-			x1 := xModel[x+1]
-			z00 := float32(height[row+x])
-			z10 := float32(height[row+x+1])
-			z01 := float32(height[nextRow+x])
-			z11 := float32(height[nextRow+x+1])
-
-			if err := writeTri(
-				[3]float32{x0, y0, z00},
-				[3]float32{x1, y0, z10},
-				[3]float32{x0, y1, z01},
-			); err != nil {
-				return err
-			}
-
-			if err := writeTri(
-				[3]float32{x1, y0, z10},
-				[3]float32{x1, y1, z11},
-				[3]float32{x0, y1, z01},
-			); err != nil {
-				return err
-			}
-		}
-	}
-
-	// =========================================================
-	// 5️⃣ 底面（边界约束 + 中心扇形）
-	// 与侧壁共享同一边界离散点，显著降低面数且保持闭合。
-	// =========================================================
-	type xy struct {
-		x float32
-		y float32
-	}
-	boundary := make([]xy, 0, max(0, 2*(gridW+gridH)-4))
-
-	// 后边: left -> right
-	for x := 0; x < gridW; x++ {
-		boundary = append(boundary, xy{x: xModel[x], y: yModel[0]})
-	}
-	// 右边: back -> front（跳过右上角）
-	for y := 1; y < gridH; y++ {
-		boundary = append(boundary, xy{x: xModel[gridW-1], y: yModel[y]})
-	}
-	// 前边: right -> left（跳过右下角）
-	for x := gridW - 2; x >= 0; x-- {
-		boundary = append(boundary, xy{x: xModel[x], y: yModel[gridH-1]})
-	}
-	// 左边: front -> back（跳过左下角和左上角）
-	for y := gridH - 2; y > 0; y-- {
-		boundary = append(boundary, xy{x: xModel[0], y: yModel[y]})
-	}
-
-	center := [3]float32{
-		(xModel[0] + xModel[gridW-1]) * 0.5,
-		(yModel[0] + yModel[gridH-1]) * 0.5,
-		zBase32,
-	}
-	for i := 0; i < len(boundary); i++ {
-		j := (i + 1) % len(boundary)
-		v1 := [3]float32{boundary[i].x, boundary[i].y, zBase32}
-		v2 := [3]float32{boundary[j].x, boundary[j].y, zBase32}
-		if err := writeTri(center, v2, v1); err != nil {
-			return err
-		}
-	}
-
-	// =========================================================
-	// 6️⃣ 四边侧壁（完全闭合）
-	// =========================================================
-
-	// ---- 前边（y=0）
-	for x := 0; x < gridW-1; x++ {
-		x0 := xModel[x]
-		x1 := xModel[x+1]
-
-		z1 := float32(height[(gridH-1)*gridW+x])
-		z2 := float32(height[(gridH-1)*gridW+x+1])
-
-		y := yModel[gridH-1]
-
-		if err := writeTri([3]float32{x0, y, zBase32},
-			[3]float32{x1, y, zBase32},
-			[3]float32{x0, y, z1}); err != nil {
-			return err
-		}
-
-		if err := writeTri([3]float32{x1, y, zBase32},
-			[3]float32{x1, y, z2},
-			[3]float32{x0, y, z1}); err != nil {
-			return err
-		}
-	}
-
-	// ---- 后边（y=max）
-	yMax := yModel[0]
-
-	for x := 0; x < gridW-1; x++ {
-		x0 := xModel[x]
-		x1 := xModel[x+1]
-
-		z1 := float32(height[x])
-		z2 := float32(height[x+1])
-
-		if err := writeTri([3]float32{x0, yMax, zBase32},
-			[3]float32{x0, yMax, z1},
-			[3]float32{x1, yMax, zBase32}); err != nil {
-			return err
-		}
-
-		if err := writeTri([3]float32{x1, yMax, zBase32},
-			[3]float32{x0, yMax, z1},
-			[3]float32{x1, yMax, z2}); err != nil {
-			return err
-		}
-	}
-
-	// ---- 左边（x=0）
-	for y := 0; y < gridH-1; y++ {
-		y0 := yModel[y]
-		y1 := yModel[y+1]
-
-		z1 := float32(height[y*gridW])
-		z2 := float32(height[(y+1)*gridW])
-
-		if err := writeTri([3]float32{0, y0, zBase32},
-			[3]float32{0, y0, z1},
-			[3]float32{0, y1, zBase32}); err != nil {
-			return err
-		}
-
-		if err := writeTri([3]float32{0, y1, zBase32},
-			[3]float32{0, y0, z1},
-			[3]float32{0, y1, z2}); err != nil {
-			return err
-		}
-	}
-
-	// ---- 右边（x=max）
-	xMax := xModel[gridW-1]
-	for y := 0; y < gridH-1; y++ {
-		y0 := yModel[y]
-		y1 := yModel[y+1]
-
-		z1 := float32(height[y*gridW+(gridW-1)])
-		z2 := float32(height[(y+1)*gridW+(gridW-1)])
-
-		if err := writeTri([3]float32{xMax, y0, zBase32},
-			[3]float32{xMax, y1, zBase32},
-			[3]float32{xMax, y0, z1}); err != nil {
-			return err
-		}
-
-		if err := writeTri([3]float32{xMax, y1, zBase32},
-			[3]float32{xMax, y1, z2},
-			[3]float32{xMax, y0, z1}); err != nil {
-			return err
-		}
+	if err := writeSideWalls(stlWriter, xModel, yModel, height, gridW, gridH, zBase32); err != nil {
+		return err
 	}
 
 	return nil
