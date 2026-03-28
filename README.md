@@ -2,6 +2,8 @@
 
 This project provides a server that converts 2D images into 3D relief models in STL format, suitable for 3D printing or rendering.
 
+## ref to https://github.com/Bigchx/mcp_3d_relief
+
 ### API 参数
 
 `POST /v1/relief` 使用 `multipart/form-data` 上传，当前接口参数如下：
@@ -12,7 +14,7 @@ This project provides a server that converts 2D images into 3D relief models in 
 - `baseThickness`：底座厚度，单位毫米，默认 `2.0`
 - `skipConv`：是否跳过深度图转换，默认 `false`
 - `invert`：是否反转浮雕方向，默认 `false`
-- `detailLevel`：细节等级，默认 `1`
+- `detailLevel`：细节等级，默认 `2`
 
 其中 `detailLevel` 为整数等级：
 - `1`：普通精度

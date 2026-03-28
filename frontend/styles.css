@@ -39,6 +39,7 @@ select {
 }
 
 .shell {
+  position: relative;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 26px;
@@ -49,6 +50,35 @@ select {
 .header {
   margin-bottom: 22px;
   text-align: center;
+}
+
+.github-link {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.92);
+  color: #111827;
+  text-decoration: none;
+  box-shadow: 0 8px 20px rgba(18, 31, 59, 0.1);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.github-link svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.github-link:hover {
+  transform: translateY(-1px);
+  border-color: rgba(47, 91, 234, 0.35);
+  box-shadow: 0 10px 24px rgba(18, 31, 59, 0.14);
 }
 
 .header h1 {
@@ -652,6 +682,19 @@ button:disabled {
 }
 
 @media (max-width: 920px) {
+  .github-link {
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+  }
+
+  .github-link svg {
+    width: 14px;
+    height: 14px;
+  }
+
   .frame-grid,
   .frame-toolbar {
     grid-template-columns: 1fr;
