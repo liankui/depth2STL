@@ -17,6 +17,9 @@ func main() {
 	router := gin.Default()
 	router.MaxMultipartMemory = 10 << 20 // 10 MiB
 
+	// Add CORS middleware
+	router.Use(corsMiddleware())
+
 	{
 		v1 := router.Group("/v1")
 		v1.POST("/relief", api.CreateHandler)                             // 创建任务
@@ -48,12 +51,22 @@ func main() {
 func frontendConfigHandler(c *gin.Context) {
 	apiBaseURL := os.Getenv("API_BASE_URL")
 	if apiBaseURL == "" {
+		scheme := requestScheme(c)
+		host := requestHost(c)
+		
+		// 检查端口是否需要显示
 		port := os.Getenv("PORT")
 		if port == "" {
 			port = "31101"
 		}
-
-		apiBaseURL = fmt.Sprintf("%s://%s:%s/v1", requestScheme(c), requestHost(c), port)
+		
+		// 如果是标准端口，不需要在 URL 中显示
+		var portStr string
+		if (scheme == "https" && port != "443") || (scheme == "http" && port != "80") {
+			portStr = ":" + port
+		}
+		
+		apiBaseURL = fmt.Sprintf("%s://%s%s/v1", scheme, host, portStr)
 	}
 
 	c.Header("Content-Type", "application/javascript; charset=utf-8")
@@ -98,3 +111,23 @@ func crontab() {
 
 	c.Start()
 }
+
+func corsMiddleware() func(*gin.Context) {
+	return func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
+		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
+
+		// 处理 OPTIONS 预检请求
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+
+		c.Next()
+	}
+}
+
+
