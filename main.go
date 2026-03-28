@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"net"
 	"os"
 	"strings"
 
@@ -15,7 +13,7 @@ func main() {
 	// Creates a gin router with default middleware:
 	// logger and recovery (crash-free) middleware
 	router := gin.Default()
-	router.MaxMultipartMemory = 10 << 20 // 10 MiB
+	router.MaxMultipartMemory = 3 << 20 // 3 MiB
 
 	// Add CORS middleware
 	router.Use(corsMiddleware())
@@ -51,49 +49,12 @@ func main() {
 func frontendConfigHandler(c *gin.Context) {
 	apiBaseURL := os.Getenv("API_BASE_URL")
 	if apiBaseURL == "" {
-		scheme := requestScheme(c)
-		host := requestHost(c)
-		
-		// 检查端口是否需要显示
-		port := os.Getenv("PORT")
-		if port == "" {
-			port = "31101"
-		}
-		
-		// 如果是标准端口，不需要在 URL 中显示
-		var portStr string
-		if (scheme == "https" && port != "443") || (scheme == "http" && port != "80") {
-			portStr = ":" + port
-		}
-		
-		apiBaseURL = fmt.Sprintf("%s://%s%s/v1", scheme, host, portStr)
+		// 默认走同源相对路径，避免反向代理场景下端口拼接错误。
+		apiBaseURL = "/v1"
 	}
 
 	c.Header("Content-Type", "application/javascript; charset=utf-8")
 	c.String(200, "window.APP_CONFIG = { apiBaseUrl: %q };\n", strings.TrimRight(apiBaseURL, "/"))
-}
-
-func requestScheme(c *gin.Context) string {
-	if c.GetHeader("X-Forwarded-Proto") == "https" {
-		return "https"
-	}
-	if c.Request.TLS != nil {
-		return "https"
-	}
-	return "http"
-}
-
-func requestHost(c *gin.Context) string {
-	host := c.Request.Host
-	if host == "" {
-		return "localhost"
-	}
-
-	if name, _, err := net.SplitHostPort(host); err == nil {
-		return name
-	}
-
-	return host
 }
 
 func crontab() {
@@ -129,5 +90,3 @@ func corsMiddleware() func(*gin.Context) {
 		c.Next()
 	}
 }
-
-

@@ -3,7 +3,8 @@ set -euox pipefail
 
 OS="linux"
 ARCH="amd64"
-REGISTRY="easzlab.io.local:5000"
+REGISTRY=""
+#REGISTRY="easzlab.io.local:5000"
 IMAGE_TAG="v1.0.0"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -29,3 +30,6 @@ docker build \
 if [[ -n "$REGISTRY" ]]; then
   docker push "$IMAGE_NAME"
 fi
+
+docker save "$IMAGE_NAME" -o depth2stl-server.tar
+scp depth2stl-server.tar ubuntu@49.234.207.56:/home/ubuntu
