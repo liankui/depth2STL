@@ -42,6 +42,36 @@ let resultObjectUrl = "";
 let jobPollTimer = null;
 let currentSampleName = "";
 let selectedSourceFile = null;
+let currentJobStatus = "idle";
+const downloadState = {
+  image: { inFlight: false, triggeredJobs: new Set() },
+  stl: { inFlight: false, triggeredJobs: new Set() },
+};
+
+function getActiveJobId() {
+  return (currentJobId || jobIdInput.value || "").trim();
+}
+
+function hasTriggeredDownload(kind, jobId) {
+  return Boolean(jobId) && downloadState[kind].triggeredJobs.has(jobId);
+}
+
+function isDownloadBlocked(kind, jobId) {
+  if (!jobId) {
+    return false;
+  }
+  return downloadState[kind].inFlight || hasTriggeredDownload(kind, jobId);
+}
+
+function syncDownloadButtons() {
+  const done = currentJobStatus === "done";
+  const activeJobId = getActiveJobId();
+  const imageBlocked = isDownloadBlocked("image", activeJobId);
+  const stlBlocked = isDownloadBlocked("stl", activeJobId);
+
+  downloadImageBtn.disabled = !done || imageBlocked;
+  downloadStlBtn.disabled = !done || stlBlocked;
+}
 
 function formatSize(size) {
   if (size < 1024 * 1024) {
@@ -70,20 +100,21 @@ function setFrameImage(frame, img, placeholder, objectUrl, emptyText) {
 
 function setStatus(status) {
   const safeStatus = status || "idle";
+  currentJobStatus = safeStatus;
   jobStatusBadge.textContent = safeStatus;
   jobStatusBadge.className = `badge badge-${safeStatus}`;
-  const done = safeStatus === "done";
-  downloadImageBtn.disabled = !done;
-  downloadStlBtn.disabled = !done;
-  if (!done) {
+  syncDownloadButtons();
+  if (safeStatus !== "done") {
     downloadImageBtn.classList.remove("is-downloaded");
     downloadStlBtn.classList.remove("is-downloaded");
   }
 }
 
 function setCurrentJobId(jobId) {
-  currentJobId = jobId || "";
+  const nextJobId = (jobId || "").trim();
+  currentJobId = nextJobId;
   jobIdInput.value = currentJobId;
+  syncDownloadButtons();
 }
 
 function formatSampleName(fileName) {
@@ -345,29 +376,29 @@ async function downloadFile(jobId, kind) {
   if (!jobId) {
     throw new Error("请先输入 jobId");
   }
+  if (isDownloadBlocked(kind, jobId)) {
+    throw new Error("下载进行中，请勿重复点击");
+  }
 
   const endpoint = kind === "image" ? "image" : "stl";
-  let response;
+  const downloadUrl = `${API_BASE}/relief/download/${endpoint}/${jobId}`;
+  downloadState[kind].inFlight = true;
+  downloadState[kind].triggeredJobs.add(jobId);
+  syncDownloadButtons();
   try {
-    response = await fetch(`${API_BASE}/relief/download/${endpoint}/${jobId}`);
-  } catch {
-    throw new Error("下载接口无法连接");
+    // 用浏览器原生下载链路，避免 fetch+blob 全量缓冲。
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = `${jobId}.${kind === "image" ? "png" : "stl"}`;
+    link.rel = "noopener";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    await new Promise((resolve) => setTimeout(resolve, 800));
+  } finally {
+    downloadState[kind].inFlight = false;
+    syncDownloadButtons();
   }
-
-  if (!response.ok) {
-    const data = await response.json().catch(() => null);
-    throw new Error(data && data.error ? data.error : "下载失败");
-  }
-
-  const blob = await response.blob();
-  const objectUrl = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = objectUrl;
-  link.download = `${jobId}.${kind === "image" ? "png" : "stl"}`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(objectUrl);
 }
 
 async function applySampleImage(sampleName) {
@@ -490,18 +521,40 @@ uploadForm.addEventListener("submit", async (event) => {
 });
 
 downloadImageBtn.addEventListener("click", async () => {
+  const targetJobId = getActiveJobId();
+  if (!targetJobId) {
+    statusMessage.textContent = "请先输入 jobId。";
+    return;
+  }
+  if (isDownloadBlocked("image", targetJobId)) {
+    statusMessage.textContent = "image 下载已触发，请勿重复点击。";
+    return;
+  }
+  statusMessage.textContent = "image 下载中，请稍候...";
   try {
-    await downloadFile(currentJobId || jobIdInput.value.trim(), "image");
+    await downloadFile(targetJobId, "image");
     downloadImageBtn.classList.add("is-downloaded");
+    statusMessage.textContent = "image 下载已开始，请在浏览器下载列表中查看进度。";
   } catch (downloadError) {
     statusMessage.textContent = `下载 image 失败：${downloadError.message}`;
   }
 });
 
 downloadStlBtn.addEventListener("click", async () => {
+  const targetJobId = getActiveJobId();
+  if (!targetJobId) {
+    statusMessage.textContent = "请先输入 jobId。";
+    return;
+  }
+  if (isDownloadBlocked("stl", targetJobId)) {
+    statusMessage.textContent = "STL 下载中，请勿重复点击。";
+    return;
+  }
+  statusMessage.textContent = "STL 下载中，请稍候...";
   try {
-    await downloadFile(currentJobId || jobIdInput.value.trim(), "stl");
+    await downloadFile(targetJobId, "stl");
     downloadStlBtn.classList.add("is-downloaded");
+    statusMessage.textContent = "STL 下载已开始，请在浏览器下载列表中查看进度。";
   } catch (downloadError) {
     statusMessage.textContent = `下载 STL 失败：${downloadError.message}`;
   }

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 )
 
 var pwd, _ = os.Getwd()
+var downloadingFiles sync.Map
 
 func parseFloat64Form(c *gin.Context, key string, defaultValue float64) (float64, error) {
 	value := strings.TrimSpace(c.PostForm(key))
@@ -167,6 +169,12 @@ func validateFileType(filename string) error {
 
 func DownloadStlHandler(c *gin.Context) {
 	jobID := c.Param("jobId")
+	downloadKey := "stl:" + jobID
+	if _, loaded := downloadingFiles.LoadOrStore(downloadKey, struct{}{}); loaded {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "download already in progress"})
+		return
+	}
+	defer downloadingFiles.Delete(downloadKey)
 
 	val, ok := jobStore.Load(jobID)
 	if !ok {
@@ -194,12 +202,19 @@ func DownloadStlHandler(c *gin.Context) {
 	c.Header("Content-Type", "application/octet-stream")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s.stl", job.ID))
 	c.Header("Content-Transfer-Encoding", "binary")
+	c.Header("Cache-Control", "public, max-age=86400, immutable")
 
 	c.File(job.StlPath)
 }
 
 func DownloadImageHandler(c *gin.Context) {
 	jobID := c.Param("jobId")
+	downloadKey := "image:" + jobID
+	if _, loaded := downloadingFiles.LoadOrStore(downloadKey, struct{}{}); loaded {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "download already in progress"})
+		return
+	}
+	defer downloadingFiles.Delete(downloadKey)
 
 	val, ok := jobStore.Load(jobID)
 	if !ok {
@@ -227,6 +242,7 @@ func DownloadImageHandler(c *gin.Context) {
 	c.Header("Content-Type", "application/octet-stream")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s.png", job.ID))
 	c.Header("Content-Transfer-Encoding", "binary")
+	c.Header("Cache-Control", "public, max-age=86400, immutable")
 
 	c.File(job.ImagePath)
 }
